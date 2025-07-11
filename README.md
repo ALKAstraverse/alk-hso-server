@@ -1,3 +1,6 @@
+cấu hình sql ở hso.conf
+
+
 Cách Chạy Server:
 
 b1: trỏ đến thư mục chứa file hso2
