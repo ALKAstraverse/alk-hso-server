@@ -1,6 +1,3 @@
-cấu hình sql ở hso.conf
-
-
 Cách Chạy Server:
 
 *kết nối server với database ở file hso.conf
