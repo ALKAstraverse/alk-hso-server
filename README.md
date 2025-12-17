@@ -1,21 +1,9 @@
-╔══════════════════════════════════════╗
-║        🚀 CÁCH CHẠY SERVER 🚀       ║
-╚══════════════════════════════════════╝
+## Cách Chạy Server
 
-⚙️  Cấu hình Database
-━━━━━━━━━━━━━━━━━━━━
-• Kết nối server với database trong file: hso.conf
-• Kiểm tra lại host / port / user / password
+• Kết nối server với database trong file `hso.conf`.
 
-📁  Bước 1: Truy cập thư mục server
-━━━━━━━━━━━━━━━━━━━━
-$ cd /storage/download/hso
+Bước 1: Truy cập thư mục chứa source server:
+$ cd /storage/download/hso2
 
-▶️  Bước 2: Khởi động server
-━━━━━━━━━━━━━━━━━━━━
+Bước 2: Chạy server:
 $ java -jar -server target/HSO_mint_2-1.0-jar-with-dependencies.jar
-
-✅  Hoàn tất
-━━━━━━━━━━━━━━━━━━━━
-Nếu server không báo lỗi và log chạy bình thường → server đã sẵn sàng hoạt động
-
