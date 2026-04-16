@@ -49,11 +49,11 @@ CREATE TABLE `account` (
 
 INSERT INTO `account` (`id`, `user`, `pass`, `char`, `status`, `lock`, `coin`, `phone`, `ip`, `tiennap`, `pass2`, `tongnap`, `checkmocnap`) VALUES
 (1, 'admin', '1', '[\"alkisme\",\"buivanhoa\"]', 0, 0, 90860176, '0368544429', '14.171.7.173', 0, '0', 0, NULL),
-(2, 'quan', 'quan', '[\"quan2k12\",\"quan1234\",\"doan2k15\"]', 0, 0, 0, '0', '', 0, '0', 0, NULL),
-(3, 'tuan', 'tuan', '[\"anhbacolac\"]', 0, 0, 1222222, NULL, '', 0, '0', 0, NULL),
-(2875, 'Huy1tuan2', '111111', '[\"chienthan\"]', 1, 0, 0, '0', '', 0, '0', 0, NULL),
+(2, '1111', '1111', '[\"quan2k12\",\"quan1234\",\"doan2k15\"]', 0, 0, 0, '0', '', 0, '0', 0, NULL),
+(3, '11111', '11111', '[\"anhbacolac\"]', 0, 0, 1222222, NULL, '', 0, '0', 0, NULL),
+(2875, '111111', '111111', '[\"chienthan\"]', 1, 0, 0, '0', '', 0, '0', 0, NULL),
 (2876, NULL, NULL, '[]', 1, 0, 5000000, '0', '', 0, '0', 0, NULL),
-(2878, 'huy12gm', 'huydzhihi', '[\"thankiem\"]', 0, 0, 1178113, '0', '0', 0, '0', 0, NULL);
+(2878, '111111', '111111', '[\"thankiem\"]', 0, 0, 1178113, '0', '0', 0, '0', 0, NULL);
 
 -- --------------------------------------------------------
 
