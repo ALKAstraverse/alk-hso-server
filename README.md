@@ -1,12 +1,18 @@
 <h2 align="center">CÁCH CHẠY SERVER</h2>
 
-**Bước 1:** Truy cập thư mục chứa source server
+**Bước 1:** Cài đặt Java 17
+
+```bash
+pkg install openjdk-17
+```
+
+**Bước 2:** Truy cập thư mục chứa source server
 
 ```bash
 cd /storage/download/hso2
 ```
 
-**Bước 2:** Chạy server
+**Bước 3:** Chạy server
 
 ```bash
 java -jar -server target/HSO_mint_2-1.0-jar-with-dependencies.jar
