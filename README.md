@@ -15,7 +15,7 @@ cd /storage/download/hso2
 **Bước 3:** Chạy server
 
 ```bash
-java -jar -server target/HSO_mint_2-1.0-jar-with-dependencies.jar
+java -jar -server target/HSO_Re_2-1.0-jar-with-dependencies.jar
 ```
 
 
