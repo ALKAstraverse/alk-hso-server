@@ -1,42 +1,45 @@
-[center][size=18][b]CÁCH CHẠY SERVER[/b][/size][/center]
+<h2 align="center">CÁCH CHẠY SERVER</h2>
 
-[b]Bước 1:[/b] Truy cập thư mục chứa source server
-[code]
+**Bước 1:** Truy cập thư mục chứa source server
+
+```bash
 cd /storage/download/hso2
-[/code]
+```
 
-[b]Bước 2:[/b] Chạy server
-[code]
+**Bước 2:** Chạy server
+
+```bash
 java -jar -server target/HSO_mint_2-1.0-jar-with-dependencies.jar
-[/code]
+```
 
 
-[center][size=18][b]CÁCH SỬA IP FILE CLIENT[/b][/size][/center]
+<h2 align="center">CÁCH SỬA IP FILE CLIENT</h2>
 
-[b]Sửa IP:[/b]
-[code]
+**Sửa IP:**
+```text
 File: dw.class
 Dòng: 51, 63, ...
-[/code]
+```
 
-[b]Sửa Port:[/b]
-[code]
+**Sửa Port:**
+```text
 File: ft.class
 Dòng: 273 -> 278
 Port được mã hóa bằng HEX
+
 Ví dụ:
 19129 = 0x4AB9
-[/code]
+```
 
 
-[center][size=18][b]CẤU HÌNH KHÁC[/b][/size][/center]
+<h2 align="center">CẤU HÌNH KHÁC</h2>
 
-[b]Kết nối database:[/b]
-[code]
+**Kết nối database**
+```text
 File cấu hình: hso.conf
-[/code]
+```
 
-[b]Client:[/b]
-[code]
+**Client**
+```text
 client/hso-client.jar
-[/code]
+```
