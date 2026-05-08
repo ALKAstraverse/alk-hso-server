@@ -9,7 +9,7 @@ pkg install openjdk-17 -y
 **Bước 2:** Truy cập thư mục chứa source server
 
 ```bash
-cd /storage/download/hso2
+cd /storage/download/hso
 ```
 
 **Bước 3:** Chạy server
