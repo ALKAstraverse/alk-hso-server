@@ -3,7 +3,7 @@
 **Bước 1:** Cài đặt Java 17
 
 ```bash
-pkg install openjdk-17
+pkg install openjdk-17 -y
 ```
 
 **Bước 2:** Truy cập thư mục chứa source server
