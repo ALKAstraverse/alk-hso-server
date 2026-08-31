@@ -49,3 +49,13 @@ File cấu hình: hso.conf
 ```text
 client/hso-client.jar
 ```
+## ⚠️ Disclaimer
+
+> **Mục đích sử dụng:** Source code này được công khai nhằm mục đích **học tập, nghiên cứu và tham khảo**.
+
+- Không sử dụng source code cho các mục đích **vi phạm pháp luật**.
+- Người sử dụng tự chịu trách nhiệm về mọi hoạt động và hành vi phát sinh từ việc sử dụng source code.
+- Tác giả không chịu trách nhiệm đối với bất kỳ thiệt hại hoặc hành vi sử dụng sai mục đích nào.
+- Vui lòng tuân thủ pháp luật hiện hành và các quy định liên quan khi sử dụng dự án.
+
+**By using this source code, you agree to use it for lawful purposes only.**
