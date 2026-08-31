@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import client.Clan;
+import client.Disciple;
 import client.Pet;
 import client.Player;
 import event.BossEvent;
@@ -137,8 +138,24 @@ public class Service {
         m.writer().writeByte(p.eye);
         m.writer().writeByte(p.hair);
         //
-        byte[] i1 = new byte[]{0, 1, 2, 3, 4, 53, 54, 55, 7, 8, 9, 10, 11, 14, 15, 16, 17, 18, 19, 20, 27, 28, 33, 34,
-            35, 36, 40, 112, -75, -74, -73};
+        // Full stat and effect option list to send to client in4
+        byte[] i1 = new byte[]{
+            0, 1, 2, 3, 4, 5, 6,
+            7, 8, 9, 10, 11, 12, 13,
+            14, 15,
+            16, 17, 18, 19, 20, 21, 22,
+            27, 28, 29, 30, 31, 32,
+            33, 34, 35, 36,
+            40, 41, 42,
+            51, 52, 53, 54, 55,
+            56, 57,
+            62, 63, 64, 65, 66, 67,
+            72, 73, 74, 75, 76, 78, 80, 82, 83, 85, 87, 89, 90, 95, 99,
+            100, 101, 102, 106, 107, 112, 113, 116,
+            (byte) 128, (byte) 130, (byte) 131, (byte) 133, (byte) 134, (byte) 135, (byte) 136, (byte) 137, (byte) 138, (byte) 139, (byte) 140, (byte) 141, (byte) 142,
+            (byte) 155, (byte) 159, (byte) 160, (byte) 161, (byte) 164, (byte) 166, (byte) 168, (byte) 170, (byte) 171, (byte) 173, (byte) 175,
+            (byte) 178, (byte) 179, (byte) 180, (byte) 181, (byte) 182, (byte) 183, (byte) 184, (byte) 185, (byte) 186
+        };
         m.writer().writeByte(i1.length);
         for (int i = 0; i < i1.length; i++) {
             m.writer().writeByte(i1[i]);
@@ -185,7 +202,7 @@ public class Service {
             m.writer().writeByte(p.fashion[i]);
         }
         m.writer().writeByte(3); // nap tien?
-        m.writer().writeShort(get_id_mat_na(p)); // id mat na
+        m.writer().writeShort(p.id_name != -1 ? p.id_name : get_id_mat_na(p)); // id mat na
         m.writer().writeByte(1); // paint mat na trc sau
         m.writer().writeShort(get_id_phiphong(p)); // phi phong
         m.writer().writeShort(get_id_weapon(p)); // id weapon
@@ -199,6 +216,23 @@ public class Service {
         //
         p.conn.addmsg(m);
         m.cleanup();
+    }
+
+    public static final byte[] MALE_HAIR_IDS = new byte[]{0, 1, 4, 5, 8, 9, 12, 13, 16, 17, 20, 21, 24, 25, 28, 29, 34, 35, 38, 39, 42};
+    public static final byte[] FEMALE_HAIR_IDS = new byte[]{2, 3, 6, 7, 10, 11, 14, 15, 18, 19, 22, 23, 26, 27, 30, 31, 36, 37, 40, 41, 43};
+
+    public static boolean isMaleHair(int hairId) {
+        for (byte id : MALE_HAIR_IDS) {
+            if (id == hairId) return true;
+        }
+        return false;
+    }
+
+    public static boolean isFemaleHair(int hairId) {
+        for (byte id : FEMALE_HAIR_IDS) {
+            if (id == hairId) return true;
+        }
+        return false;
     }
 
     public static short get_id_hair(Player p) {
@@ -386,11 +420,7 @@ public class Service {
                 m.writer().writeByte(temp.tier); // plus item (tier)
                 m.writer().writeShort(temp.level);
                 m.writer().writeByte(temp.color);
-                m.writer().writeByte(temp.op.size());
-                for (int j = 0; j < temp.op.size(); j++) {
-                    m.writer().writeByte(temp.op.get(j).id);
-                    m.writer().writeInt(temp.op.get(j).getParam(temp.tier));
-                }
+                temp.writeItemOptions(m, p.clazz);
                 m.writer().writeByte(1); // islock
             } else {
                 m.writer().writeByte(-1);
@@ -607,7 +637,9 @@ public class Service {
         Message m = new Message(32);
         switch (type) {
             case 0: { // use hp potion
-
+                if (param > 0 && p.get_eff(-206) != null) {
+                    param = param / 2;
+                }
                 long par_can_add = 2_000_000_000 - p.hp;
                 if (param > par_can_add) {
                     param = par_can_add;
@@ -715,11 +747,7 @@ public class Service {
                         m2.writer().writeByte(temp.tier); // plus item = tier
                         m2.writer().writeShort(temp.level);
                         m2.writer().writeByte(temp.color);
-                        m2.writer().writeByte(temp.op.size());
-                        for (int j = 0; j < temp.op.size(); j++) {
-                            m2.writer().writeByte(temp.op.get(j).id);
-                            m2.writer().writeInt(temp.op.get(j).getParam(temp.tier));
-                        }
+                        temp.writeItemOptions(m2, p0.clazz);
                         m2.writer().writeByte(0); // can sell
                     } else {
                         m2.writer().writeByte(-1);
@@ -785,11 +813,7 @@ public class Service {
         Item3 temp = conn.p.item.bag3[id];
         if (temp != null) {
             Message m = new Message(21);
-            m.writer().writeByte(temp.op.size());
-            for (int i = 0; i < temp.op.size(); i++) {
-                m.writer().writeByte(temp.op.get(i).id);
-                m.writer().writeInt(temp.op.get(i).getParam(temp.tier));
-            }
+            temp.writeItemOptions(m, conn.p.clazz);
             conn.addmsg(m);
             m.cleanup();
         }
@@ -817,7 +841,7 @@ public class Service {
                         m.writer().writeByte(temp.op.get(j).id);
                         m.writer().writeInt(temp.op.get(j).getParam(0));
                     }
-                    m.writer().writeByte(1);
+                    m.writer().writeByte(0); // pricetype: 0=coin in coin shop
                 }
                 break;
             }
@@ -1441,6 +1465,10 @@ public class Service {
                 conn.p.item.char_inventory(3);
             }
         } else if (type == 0) {
+            if (conn.p.detu != null && conn.p.detu.state == client.Disciple.STATE_SUMMONED) {
+                send_notice_box(conn, "Khi Đệ Tử được gọi ra, không được đeo Pet!");
+                return;
+            }
             Message m = null;
             if (conn.p.pet_follow) {
                 for (Pet temp : conn.p.mypet) {
@@ -1448,7 +1476,7 @@ public class Service {
                         temp.is_follow = false;
                         m = new Message(44);
                         m.writer().writeByte(28);
-                        m.writer().writeByte(1);
+                    m.writer().writeByte(2); // pricetype: 0=vang, 1=ngoc, 2=coin
                         m.writer().writeByte(9);
                         m.writer().writeByte(9);
                         m.writer().writeUTF(temp.name);
@@ -1556,6 +1584,29 @@ public static void npc_chat(Session conn, String s) throws IOException {
                     return;
                 }
 
+                // Check rule mua vé luyện đệ tử (227)
+                if (idbuy == Disciple.ITEM_VE_LUYEN_DETU) {
+                    if (p.detu == null) {
+                        send_notice_box(p.conn, "Bạn chưa có Đệ Tử!");
+                        return;
+                    }
+                    p.detu.checkDailyReset();
+                    if (p.detu.training_ticket_bought_today) {
+                        send_notice_box(p.conn, "Hôm nay bạn đã mua vé luyện đệ tử rồi, mỗi ngày chỉ được mua 1 lần!");
+                        return;
+                    }
+                    if (quanity > 1) {
+                        send_notice_box(p.conn, "Mỗi ngày chỉ được mua tối đa 1 vé luyện đệ tử!");
+                        return;
+                    }
+                }
+                if (idbuy == Disciple.ITEM_BUA_GOI_DETU) {
+                    if (p.detu == null) {
+                        send_notice_box(p.conn, "Bạn chưa có Đệ Tử!");
+                        return;
+                    }
+                }
+
                 long price = ItemTemplate4.item.get(idbuy).getPrice() * quanity;
                 if (ItemTemplate4.item.get(idbuy).getPricetype() == 0) {
                     if (p.get_vang() < price) {
@@ -1571,6 +1622,11 @@ public static void npc_chat(Session conn, String s) throws IOException {
                     }
                     p.update_ngoc(-price);
                 }
+
+                if (idbuy == Disciple.ITEM_VE_LUYEN_DETU) {
+                    p.detu.training_ticket_bought_today = true;
+                }
+
                 int quant_add_bag = quanity + p.item.total_item_by_id(4, idbuy);
                 if (quant_add_bag > 32000) {
                     send_notice_box(p.conn, "không thể mua thêm");
@@ -1732,7 +1788,26 @@ public static void npc_chat(Session conn, String s) throws IOException {
                 break;
             }
             case 2: {
+                // Validate hair gender according to current active character
+                // Gender rule: Mage (clazz == 2) = Female (1), all other classes (0, 1, 3) = Male (0)
+                byte activeClazz = p.clazz;
+                boolean isFemaleClass = (activeClazz == 2); // CLAZZ_MAGE
+                boolean isValidHair;
+                if (isFemaleClass) {
+                    isValidHair = isFemaleHair(idbuy);
+                } else {
+                    isValidHair = isMaleHair(idbuy);
+                }
+                if (!isValidHair) {
+                    send_notice_box(p.conn, "Kiểu tóc không phù hợp với giới tính nhân vật hiện tại!");
+                    return;
+                }
+
                 p.hair = (byte) idbuy;
+                // If currently training disciple, also ensure detu.hair is kept in sync immediately
+                if (p.is_detu_training && p.detu != null) {
+                    p.detu.hair = (byte) idbuy;
+                }
                 for (int i = 0; i < p.map.players.size(); i++) {
                     Player p0 = p.map.players.get(i);
                     if (p0.id != p.id && Math.abs(p0.x - p.x) < 200 && Math.abs(p0.y - p.y) < 200) {

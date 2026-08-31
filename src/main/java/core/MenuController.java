@@ -8,6 +8,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import client.Clan;
+import client.Disciple;
 import client.Pet;
 import client.Player;
 import event.BossEvent;
@@ -91,13 +92,21 @@ public class MenuController {
                 break;
             }
             case -81: {
-                menu = new String[]{"Đăng ký lôi đài", "Vào lôi đài", "Xem lôi đài", "Thông tin", "Xem điểm lôi đài", "Huong dan", "Tháo ngọc khảm", "Vào map boss", "Top Dame Boss TG", "Nhận quà top dame boss"};
+                if (conn.p.is_detu_training) {
+                    menu = new String[]{"Ngừng Luyện Đệ Tử", "Đăng ký lôi đài", "Vào lôi đài", "Xem lôi đài", "Thông tin", "Xem điểm lôi đài", "Huong dan", "Tháo ngọc khảm", "Vào map boss", "Top Dame Boss TG", "Nhận quà top dame boss"};
+                } else {
+                    menu = new String[]{"Luyện Đệ Tử", "Đăng ký lôi đài", "Vào lôi đài", "Xem lôi đài", "Thông tin", "Xem điểm lôi đài", "Huong dan", "Tháo ngọc khảm", "Vào map boss", "Top Dame Boss TG", "Nhận quà top dame boss"};
+                }
+                break;
+            }
+            case -1: {
+                menu = new String[]{};
                 break;
             }
             case -20:
             case -3: { // Lisa
                 menu = new String[]{"Mua bán", "Mở ly", "Thuế", "Tiền cống nạp", "Nhận quà chiến trường",
-                    "Nhận quà chiếm thành", "Tặng ngọc", "Hướng dẫn tặng ngọc", "Nhận nguyên liệu"};
+                    "Nhận quà chiếm thành", "Tặng ngọc", "Hướng dẫn tặng ngọc", "Nhận nguyên liệu", "Mua Vé Luyện Đệ Tử", "Mua Bùa Gọi Đệ Tử"};
                 break;
             }
 
@@ -128,8 +137,12 @@ public class MenuController {
                 break;
             }
             case -10: { // da dich chuyen
-                menu = new String[]{"Làng Sói Trắng", "Thành Phố Kho Báu", "Khu Mua Bán", "Hang Lửa", "Rừng Ảo Giác",
-                    "Thung Lũng Kỳ Bí", "Hồ Kí Ức", "Bờ Biển", "Vực Đá", "Rặng Đá Ngầm", "Đầm Lầy", "Đền Cổ", "Hang Dơi"};
+                if (conn.p.map.map_id >= 103 && conn.p.map.map_id <= 106) {
+                    menu = new String[]{"Ve Làng Sói Trắng"};
+                } else {
+                    menu = new String[]{"Làng Sói Trắng", "Thành Phố Kho Báu", "Khu Mua Bán", "Hang Lửa", "Rừng Ảo Giác",
+                        "Thung Lũng Kỳ Bí", "Hồ Kí Ức", "Bờ Biển", "Vực Đá", "Rặng Đá Ngầm", "Đầm Lầy", "Đền Cổ", "Hang Dơi"};
+                }
                 break;
             }
             case -8: {
@@ -192,6 +205,10 @@ public class MenuController {
                 } else {
                     menu = new String[]{"Đăng ký bang", "Thông tin"};
                 }
+                break;
+            }
+            case -86: { // Mr Master
+                menu = new String[]{"Nhận Đệ Tử", "Hủy Đệ Tử", "Thông Tin"};
                 break;
             }
             case -85: { // mr edgar
@@ -309,6 +326,16 @@ public class MenuController {
         }
 
         switch (idnpc) {
+            case -1: { // NPC Da dich chuyen
+                if (index == 0) { // "Ve Làng Sói Trắng"
+                    Vgo vgo = new Vgo();
+                    vgo.id_map_go = 1;
+                    vgo.x_new = 528;
+                    vgo.y_new = 696;
+                    conn.p.change_map(conn.p, vgo);
+                }
+                break;
+            }
             case -90: {
                 if (index == 0) { // cong nap
                     if (CongNap.CAT[CongNap.NV_CONG_NAP] == 4 && CongNap.ID[CongNap.NV_CONG_NAP] == -1) {
@@ -627,9 +654,20 @@ public class MenuController {
                     List<String> list1 = new ArrayList<>();
                     for (int i = 0; i < it_change.op.size(); i++) {
                         OptionItem optionItem = OptionItem.get(it_change.op.get(i).id);
-                        list1.add(optionItem.getName() + " "
-                                + ((optionItem.getIspercent() == 1) ? (it_change.op.get(i).getParam(it_change.tier) / 100)
-                                : it_change.op.get(i).getParam(it_change.tier)));
+                        int paramVal = it_change.op.get(i).getParam(it_change.tier);
+                        String paramStr;
+                        if (optionItem.getIspercent() == 1) {
+                            paramStr = (paramVal / 100) + "%";
+                        } else if (optionItem.getIspercent() == 2) {
+                            if (paramVal >= 1000) {
+                                paramStr = (paramVal / 1000) + "," + ((paramVal % 1000) / 100) + "s";
+                            } else {
+                                paramStr = paramVal + "s";
+                            }
+                        } else {
+                            paramStr = String.valueOf(paramVal);
+                        }
+                        list1.add(optionItem.getName() + " " + paramStr);
                     }
                     String[] list = new String[list1.size()];
                     for (int i = 0; i < list1.size(); i++) {
@@ -670,6 +708,15 @@ public class MenuController {
                     Menu_MissAnwen(conn, index);
                 }
 
+                break;
+            }
+            case 888: { // Xac nhan huy de tu
+                if (index == 0) {
+                    if (conn.p.detu != null && !conn.p.is_detu_training) {
+                        conn.p.detu = null; // Equipment on disciple, hair on disciple deleted permanently
+                        Service.send_notice_box(conn, "Đã hủy Đệ Tử vĩnh viễn!");
+                    }
+                }
                 break;
             }
             case 118: {
@@ -734,11 +781,20 @@ public class MenuController {
                 break;
             }
             case -10: {
-                if (conn.p.minuong != null) {
-                    conn.p.minuong.owner = "";
-                    conn.p.minuong = null;
+                if (conn.p.map.map_id >= 103 && conn.p.map.map_id <= 106) {
+                    // New maps: teleport back to Làng Sói Trắng
+                    Vgo vgo = new Vgo();
+                    vgo.id_map_go = 1;
+                    vgo.x_new = 528;
+                    vgo.y_new = 696;
+                    conn.p.change_map(conn.p, vgo);
+                } else {
+                    if (conn.p.minuong != null) {
+                        conn.p.minuong.owner = "";
+                        conn.p.minuong = null;
+                    }
+                    Menu_DaDichChuyen10(conn, index);
                 }
-                Menu_DaDichChuyen10(conn, index);
                 break;
             }
             case -22: {
@@ -788,6 +844,10 @@ public class MenuController {
             }
             case -2: { // vxmm
                 Menu_Zoro(conn, index);
+                break;
+            }
+            case -86: {
+                Menu_Mr_Master(conn, index);
                 break;
             }
             case -85: { //
@@ -861,6 +921,10 @@ public class MenuController {
     }
 
     private static void Menu_View_LoiDai(Session conn, byte index) throws IOException {
+        if (conn.p.is_detu_training) {
+            Service.send_notice_box(conn, "Trong trạng thái luyện Đệ Tử không thể xem Lôi Đài!");
+            return;
+        }
         if (LoiDai.state != 1) {
             Service.send_notice_box(conn, "Không trong thời gian diễn ra lôi đài");
             return;
@@ -887,6 +951,10 @@ public class MenuController {
     }
 
     private static void Menu_Mrs_Oda_trong_LoiDai(Session conn, byte index) throws IOException {
+        if (conn.p.is_detu_training) {
+            Service.send_notice_box(conn, "Trong trạng thái luyện Đệ Tử không thể tham gia Lôi Đài!");
+            return;
+        }
         switch (index) {
             case 0: {
                 if (conn.p.map.ld.p1.id == conn.p.id) {
@@ -927,12 +995,29 @@ public class MenuController {
     }
 
     private static void Menu_Mrs_Oda(Session conn, byte index) throws IOException {
+        if (conn.p.is_detu_training && index != 0) {
+            Service.send_notice_box(conn, "Trong trạng thái luyện Đệ Tử không thể tham gia Lôi Đài!");
+            return;
+        }
         if (conn.p.point_active.length < 3) {
             int a0 = conn.p.point_active[0];
             int a1 = conn.p.point_active[1];
             conn.p.point_active = new int[]{a0, a1, 0};
         }
-        switch (index) {
+        if (index == 0) { // Luyen De Tu / Ngung Luyen De Tu
+            if (conn.p.is_detu_training) {
+                conn.p.switchToMaster();
+            } else {
+                if (conn.p.detu == null) {
+                    Service.send_notice_box(conn, "Bạn chưa có Đệ Tử. Hãy đến gặp Mr Master để thu nhận Đệ Tử!");
+                    return;
+                }
+                conn.p.switchToDisciple();
+            }
+            return;
+        }
+        // Offset remaining options by 1
+        switch (index - 1) {
             case 0: {
                 if (conn.p.get_ngoc() < 5) {
                     Service.send_notice_box(conn, "Không đủ 5 ngọc");
@@ -1282,6 +1367,10 @@ public class MenuController {
     }
 
     private static void Menu_Mr_Frank(Session conn, byte index) throws IOException {
+        if (conn.p.is_detu_training) {
+            Service.send_notice_box(conn, "Trong trạng thái luyện Đệ Tử không thể tham gia khu đi buôn!");
+            return;
+        }
         switch (index) {
             case 0: {
                 Service.send_box_UI(conn, 32);
@@ -1369,6 +1458,10 @@ public class MenuController {
     }
 
     private static void Menu_Graham(Session conn, byte index) throws IOException {
+        if (conn.p.is_detu_training) {
+            Service.send_notice_box(conn, "Trong trạng thái luyện Đệ Tử không thể tham gia khu đi buôn!");
+            return;
+        }
         switch (index) {
             case 0: {
                 Service.send_box_UI(conn, 32);
@@ -1460,6 +1553,10 @@ public class MenuController {
     }
 
     private static void Menu_Mr_Dylan(Session conn, byte index) throws IOException {
+        if (conn.p.is_detu_training) {
+            Service.send_notice_box(conn, "Trong trạng thái luyện Đệ Tử không thể tham gia khu đi buôn!");
+            return;
+        }
         if (conn.p.item.wear[11] == null || (conn.p.item.wear[11] != null && conn.p.item.wear[11].id != 3599)) {
             Service.send_notice_box(conn, "Con không phải là thương nhân");
             return;
@@ -1702,6 +1799,10 @@ public class MenuController {
     
 
     private static void Menu_top(Session conn, byte index) throws IOException {
+        if (conn.p.is_detu_training) {
+            Service.send_notice_box(conn, "Trong trạng thái luyện Đệ Tử không thể tham gia tính năng này!");
+            return;
+        }
         switch (index) {
             case 0: {
                 if (conn.p.chucphuc == 1) {
@@ -1922,6 +2023,10 @@ public class MenuController {
     }
 
     private static void Menu_PhoChiHuy(Session conn, byte index) throws IOException {
+        if (conn.p.is_detu_training) {
+            Service.send_notice_box(conn, "Trong trạng thái luyện Đệ Tử không thể tham gia chiếm thành / phó bản!");
+            return;
+        }
         switch (index) {
             case 0: {
     if (conn.p.level < 30) {
@@ -2130,6 +2235,72 @@ public class MenuController {
         }
     }
 
+    private static void Menu_Mr_Master(Session conn, byte index) throws IOException {
+        switch (index) {
+            case 0: { // Nhan De Tu
+                if (conn.p.detu != null) {
+                    Service.send_notice_box(conn, "Bạn đã có Đệ Tử rồi, không thể nhận thêm!");
+                    return;
+                }
+                if (conn.p.id_dua_be == -1) {
+                    Service.send_notice_box(conn, "Hãy dắt Đứa Bé về đây gặp ta để nhận làm Đệ Tử!");
+                    return;
+                }
+                // Dắt thành công về NPC Mr Master -> xóa đứa bé
+                short mob_idx = conn.p.id_dua_be;
+                conn.p.id_dua_be = -1;
+                Message m2 = new Message(8);
+                m2.writer().writeShort(mob_idx);
+                m2.writer().writeByte(0); // die
+                MapService.send_msg_player_inside(conn.p.map, conn.p, m2, true);
+                m2.cleanup();
+
+                // Random 1 of 4 classes: 0=Warrior, 1=Assassin, 2=Mage, 3=Archer
+                byte randomClass = (byte) Util.random(0, 4);
+                conn.p.detu = Disciple.createNew(conn.p, randomClass);
+
+                Service.send_notice_box(conn, "Chúc mừng bạn đã thu nhận Đệ Tử thành công!\nPhái: " 
+                        + Disciple.getClassName(randomClass) + "\nCấp độ: Lv10.");
+                break;
+            }
+            case 1: { // Huy De Tu
+                if (conn.p.detu == null) {
+                    Service.send_notice_box(conn, "Bạn chưa có Đệ Tử nào để hủy!");
+                    return;
+                }
+                if (conn.p.is_detu_training) {
+                    Service.send_notice_box(conn, "Không thể hủy Đệ Tử khi đang trong trạng thái luyện!");
+                    return;
+                }
+                // Send confirmation box
+                // Menu selection for cancel confirmation
+                MenuController.send_menu_select(conn, 888, new String[]{"Xác nhận Hủy Đệ Tử", "Đóng"});
+                break;
+            }
+            case 2: { // Thong Tin
+                if (conn.p.detu == null) {
+                    Service.send_notice_box(conn, "Mr Master:\nTa sẽ giúp bạn thu nhận đệ tử.\nHãy tìm Đứa Bé, cho kẹo hồ lô và dẫn về gặp ta nhé!");
+                } else {
+                    Disciple d = conn.p.detu;
+                    d.checkDailyReset();
+                    String info = "--- THÔNG TIN ĐỆ TỬ ---\n"
+                            + "Tên: " + d.name + "\n"
+                            + "Phái: " + Disciple.getClassName(d.clazz) + "\n"
+                            + "Cấp độ: " + d.level + "\n"
+                            + "Tiềm năng: " + d.tiemnang + "\n"
+                            + "Kỹ năng: " + d.kynang + "\n"
+                            + "Thời gian luyện còn lại hôm nay: " + (d.getRemainingTrainingTimeSeconds() / 60) + " phút\n"
+                            + "Vé luyện thêm hôm nay: " + (d.training_ticket_bought_today ? (d.training_ticket_used_today ? "Đã dùng" : "Chưa dùng") : "Chưa mua");
+                    Service.send_notice_box(conn, info);
+                }
+                break;
+            }
+            default:
+                Service.send_notice_box(conn, "Chưa có chức năng");
+                break;
+        }
+    }
+
     private static void Menu_Mr_Edgar(Session conn, byte index) throws IOException {
         switch (index) {
             case 0: {
@@ -2159,6 +2330,10 @@ public class MenuController {
     }
 
     private static void Menu_Zoro(Session conn, byte index) throws IOException {
+        if (conn.p.is_detu_training) {
+            Service.send_notice_box(conn, "Trong trạng thái luyện Đệ Tử không thể tham gia bang hội!");
+            return;
+        }
         if (conn.p.myclan != null) {
             if (conn.p.myclan.mems.get(0).name.equals(conn.p.name)) {
                 switch (index) {
@@ -2296,9 +2471,7 @@ public class MenuController {
                     return;
                 }
                 try ( Connection connection = SQL.gI().getConnection();  Statement statement = connection.createStatement();) {
-                    if (statement.executeUpdate("UPDATE `player` SET `maxbag` = 98 WHERE `id` = " + conn.p.id + ";") > 0) {
-                        connection.commit();
-                    }
+                    statement.executeUpdate("UPDATE `player` SET `maxbag` = 98 WHERE `id` = " + conn.p.id + ";");
                     Service.send_notice_box(conn, "Mở thành công 98 ô, hãy thoát game vào lại để cập nhật!");
                 } catch (SQLException e) {
                     e.printStackTrace();
@@ -2348,8 +2521,8 @@ public class MenuController {
                     Service.send_notice_box(conn, "Không đủ 5 ngọc chuyển sinh");
                     return;
                 } 
-                if (conn.p.level < 140) {
-                    Service.send_notice_box(conn, "Cần level 140");
+                if (conn.p.level < 200) {
+                    Service.send_notice_box(conn, "Cần level 200");
                     return;
                 }
                 if (conn.p.get_vang() < 10_000_000) {
@@ -2364,7 +2537,7 @@ public class MenuController {
 
                 if (tyle < 90) {
                     conn.p.tiemnang += 5;
-                    conn.p.level = 139;
+                    conn.p.level = 199;
                     conn.p.item.remove(7, 472, 5);
                     conn.p.update_ngoc(-2_500);
                     conn.p.update_vang(-5_000_000);
@@ -2383,9 +2556,10 @@ public class MenuController {
                     conn.p.update_ngoc(-5_000);
                     conn.p.update_vang(-10_000_000L);
                     conn.p.chuyensinh++;
+                    conn.p.rest_potential_point();
+                    Service.send_skill(conn.p);
                     Service.send_notice_box(conn, "+ Chuyển Sinh Thành công, nhớ thoát ra vào lại rồi hãy đi up nhé, \n+ HÃY UOT GAME. \n+ Số Lần: " + conn.p.chuyensinh);
                     Manager.gI().chatKTGprocess("Chúc Mừng " + conn.p.name + " Đã Chuyển Sinh Thành Công " + conn.p.chuyensinh + " Lần.");
-                    conn.p.update_Exp(1, false);
                     Service.send_char_main_in4(conn.p);
                     Player p = conn.p;
                     if (p.quest_daily[0] == 7 && p.quest_daily[3] < p.quest_daily[4]) {
@@ -2440,6 +2614,10 @@ public class MenuController {
     }
 
     private static void Menu_BXH(Session conn, byte index) throws IOException {
+        if (conn.p.is_detu_training) {
+            Service.send_notice_box(conn, "Trong trạng thái luyện Đệ Tử không thể xem bảng xếp hạng!");
+            return;
+        }
     switch (index) {
         case 0: {
             BXH.send(conn, 0); // BXH LEVEL
@@ -2831,7 +3009,8 @@ public class MenuController {
     private static void Menu_Zulu(Session conn, byte index) throws IOException {
         switch (index) {
             case 0: {
-                switch (conn.p.clazz) {
+                byte currentClazz = conn.p.clazz;
+                switch (currentClazz) {
                     case 0: {
                         Service.send_msg_data(conn, 23, "tocchienbinh");
                         break;
@@ -2841,11 +3020,11 @@ public class MenuController {
                         break;
                     }
                     case 2: {
-                        Service.send_msg_data(conn, 23, "tocxathu");
+                        Service.send_msg_data(conn, 23, "tocphapsu");
                         break;
                     }
                     case 3: {
-                        Service.send_msg_data(conn, 23, "tocphapsu");
+                        Service.send_msg_data(conn, 23, "tocxathu");
                         break;
                     }
                 }
@@ -2952,9 +3131,15 @@ public class MenuController {
                 m.writer().writeByte(1);
                 m.writer().writeByte(5);
             }
+            boolean isMapMonster = Map.has_monster(conn.p.map.map_id);
             for (int i = 0; i < conn.p.map.maxzone; i++) {
-                m.writer().writeUTF(
-                        "Khu " + (map[i].zone_id + 1) + " (" + map[i].players.size() + "/" + map[i].maxplayer + ")");
+                if (i == 1 && isMapMonster) {
+                    m.writer().writeUTF(
+                            "Khu 2 (Trả phí) (" + map[i].players.size() + "/" + map[i].maxplayer + ")");
+                } else {
+                    m.writer().writeUTF(
+                            "Khu " + (map[i].zone_id + 1) + " (" + map[i].players.size() + "/" + map[i].maxplayer + ")");
+                }
             }
             if (!Map.is_map_cant_save_site(conn.p.map.map_id)) {
                 m.writer().writeUTF("Khu đi buôn");
@@ -3626,36 +3811,27 @@ public class MenuController {
             }
             Item3 it = conn.p.list_thao_kham_ngoc.get(index);
             if (it != null) {
+                // Collect and return all gem items
                 for (int i = 0; i < it.op.size(); i++) {
-                    if (it.op.get(i).id == 58) {
-                        if (it.op.get(i).getParam(0) != -1) {
+                    if (it.op.get(i).id == 58 || it.op.get(i).id == 59 || it.op.get(i).id == 60) {
+                        int gemId = it.op.get(i).getParam(0);
+                        if (gemId != -1) {
                             Item47 it_add = new Item47();
-                            it_add.id = (short) (it.op.get(i).getParam(0));
+                            it_add.id = (short) gemId;
                             it_add.quantity = 1;
                             it_add.category = 7;
                             conn.p.item.add_item_bag47(7, it_add);
+                            it.op.get(i).setParam(-1);
                         }
-                        it.op.get(i).setParam(-1);
                     }
-                    if (it.op.get(i).id == 59) {
-                        if (it.op.get(i).getParam(0) != -1) {
-                            Item47 it_add = new Item47();
-                            it_add.id = (short) (it.op.get(i).getParam(0));
-                            it_add.quantity = 1;
-                            it_add.category = 7;
-                            conn.p.item.add_item_bag47(7, it_add);
-                        }
-                        it.op.get(i).setParam(-1);
-                    }
-                    if (it.op.get(i).id == 60) {
-                        if (it.op.get(i).getParam(0) != -1) {
-                            Item47 it_add = new Item47();
-                            it_add.id = (short) (it.op.get(i).getParam(0));
-                            it_add.quantity = 1;
-                            it_add.category = 7;
-                            conn.p.item.add_item_bag47(7, it_add);
-                        }
-                        it.op.get(i).setParam(-1);
+                }
+                // Also remove special stats associated with gems (Light/Dark dmg and crits: 5, 6, 72, 73, 74, 75)
+                // and other socket gem options (100, 101, 102, 103, 104, 105, 106, 107)
+                for (int i = it.op.size() - 1; i >= 0; i--) {
+                    int opId = it.op.get(i).id;
+                    if (opId == 5 || opId == 6 || opId == 72 || opId == 73 || opId == 74 || opId == 75
+                            || (opId >= 100 && opId <= 107)) {
+                        it.op.remove(i);
                     }
                 }
                 conn.p.item.char_inventory(4);
@@ -4115,6 +4291,10 @@ public class MenuController {
     }
 }
     private static void Menu_Mr_Ballard(Session conn, byte index) throws IOException {
+        if (conn.p.is_detu_training) {
+            Service.send_notice_box(conn, "Trong trạng thái luyện Đệ Tử không thể tham gia Chiến Trường!");
+            return;
+        }
         switch (index) {
             case 0: { // dang ky
                 send_menu_select(conn, 998, new String[]{"Đăng ký bằng 500.000 vàng", "Đăng ký bằng 2 ngọc"});

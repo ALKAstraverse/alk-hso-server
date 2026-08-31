@@ -15,7 +15,7 @@ public class SQL {
 
     public SQL() {
 		url = "jdbc:mysql://" + Manager.gI().mysql_host + ":3306/" + Manager.gI().mysql_database
-		      + "?autoReconnect=true&useUnicode=yes&characterEncoding=UTF-8";
+		      + "?autoReconnect=true&useUnicode=yes&characterEncoding=UTF-8&useSSL=false&allowPublicKeyRetrieval=true";
 		System.out.println(url);
 		user = Manager.gI().mysql_user;
 		pass = Manager.gI().mysql_pass;
@@ -23,12 +23,12 @@ public class SQL {
 		config.setJdbcUrl(url);
 		config.setUsername(user);
 		config.setPassword(pass);
-		config.setAutoCommit(false);
+		config.setAutoCommit(true);
 		//
 		config.setConnectionTimeout(30_000L);
-		config.setIdleTimeout(600_000);
-		config.setKeepaliveTime(0);
-		config.setMaxLifetime(1_800_000);
+		config.setIdleTimeout(300_000);
+		config.setKeepaliveTime(60_000);
+		config.setMaxLifetime(600_000);
 		config.setMaximumPoolSize(10);
 		config.setPoolName("HSO_pool");
 		//

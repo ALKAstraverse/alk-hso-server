@@ -91,8 +91,12 @@ public class Session implements Runnable {
                     }
                 } catch (InterruptedException e) {
                 } catch (IOException e) {
+                    System.out.println("SEND THREAD IO ERROR " + user + ": " + e.getMessage());
+                } catch (Exception e) {
+                    System.out.println("SEND THREAD CRASH " + user + ": " + e.getClass().getSimpleName() + " - " + e.getMessage());
+                    e.printStackTrace();
                 } finally {
-                    // disconnect();
+                    System.out.println("SEND THREAD EXITED for " + user);
                 }
             });
             this.receiv = new Thread(this);
@@ -166,7 +170,10 @@ public class Session implements Runnable {
 
     public void addmsg(Message m) {
         if (connected) {
-            this.list_msg.add(m);
+            boolean added = this.list_msg.add(m);
+            System.out.println("ADDMSG cmd=" + m.cmd + " size=" + (m.getData() != null ? m.getData().length : 0) + " queue=" + this.list_msg.size() + " added=" + added + " user=" + user);
+        } else {
+            System.out.println("ADDMSG FAILED (not connected) cmd=" + m.cmd + " user=" + user);
         }
     }
 
@@ -361,6 +368,10 @@ public class Session implements Runnable {
         m.reader().readUTF(); // pro
         m.reader().readUTF(); // agent
         this.zoomlv = m.reader().readByte();
+        if (this.zoomlv < 1 || this.zoomlv > 4) {
+            this.zoomlv = 1;
+        }
+        System.out.println("CLIENT zoomlv=" + this.zoomlv);
         m.reader().readByte(); // device
         m.reader().readInt(); // id
         m.reader().readByte(); // area
@@ -368,11 +379,12 @@ public class Session implements Runnable {
         m.reader().readByte(); // IndexRes
         m.reader().readByte(); // indexInfoLogin
         m.reader().readByte(); // fake byte
-        short indexCharPar = m.reader().readShort();
+                short indexCharPar = m.reader().readShort();
+                System.out.println("CLIENT indexCharPar=" + indexCharPar + " SERVER indexCharPar=" + Manager.gI().indexCharPar);
         m.reader().readUTF(); // stringPackageName
         //
-        Pattern p = Pattern.compile("^[a-zA-Z0-9@.]{1,15}$");
-        if ((!user_.contains("knightauto_hod_")) && (!p.matcher(user_).matches() || !p.matcher(pass_).matches())) {
+        Pattern p = Pattern.compile("^[a-zA-Z0-9@.]{1,25}$");
+        if ((!user_.contains("knightauto_hsod_") && !user_.contains("knightauto_hod_")) && (!p.matcher(user_).matches() || !p.matcher(pass_).matches())) {
             noticelogin("ký tự nhập vào không hợp lệ!!");
             return;
         }
@@ -400,9 +412,7 @@ public class Session implements Runnable {
             pass = "hsr_132";
 
             try ( Connection connnect = SQL.gI().getConnection();  Statement ps = connnect.createStatement()) {
-                if (!ps.execute("INSERT INTO `account` (`user`, `pass`, `char`,  `lock`, `coin`, `ip`, `tongnap`) VALUES ('" + user + "', '" + pass + "', '[]', '0', '0','0', 0)")) {
-                    connnect.commit();
-                }
+                ps.executeUpdate("INSERT INTO `account` (`user`, `pass`, `char`,  `lock`, `coin`, `ip`, `tongnap`) VALUES ('" + user + "', '" + pass + "', '[]', '0', '0','0', 0)");
             } catch (SQLException e) {
                 e.printStackTrace();
                 noticelogin("Có lỗi xảy ra, hãy thử lại!");
@@ -454,6 +464,7 @@ public class Session implements Runnable {
             this.user = user_;
             this.pass = pass_;
         }
+        System.out.println("indexCharPar check: client=" + indexCharPar + " server=" + Manager.gI().indexCharPar + " match=" + (indexCharPar == Manager.gI().indexCharPar));
         if (indexCharPar != Manager.gI().indexCharPar) {
             Message m13 = new Message(63);
             m13.writer().writeByte(Manager.gI().indexRes);
@@ -466,17 +477,22 @@ public class Session implements Runnable {
         }
         //
         Message md = new Message(31);
-        md.writer().writeUTF(user_);
-        md.writer().writeUTF(pass_);
+        md.writer().writeUTF(this.user);
+        md.writer().writeUTF(this.pass);
         addmsg(md);
         md.cleanup();
         //
+        try {
         for (int id0 = 10200; id0 < 10242; id0++) {
             Message m22 = new Message(-51);
             m22.writer().writeShort(id0);
             m22.writer().write(Util.loadfile("data/icon/x" + zoomlv + "/" + id0 + ".png"));
             addmsg(m22);
             m22.cleanup();
+        }
+        } catch (Exception e) {
+            System.out.println("ICON LOAD ERROR: " + e.getMessage());
+            e.printStackTrace();
         }
         this.get_in4 = true;
     }
@@ -537,6 +553,7 @@ public class Session implements Runnable {
             this.disconnect();
             return;
         }
+        System.out.println("send_listchar_board: chars=[" + this.list_char[0] + "," + this.list_char[1] + "," + this.list_char[2] + "]");
         String name_querry = String.format("`name` = '%s' OR `name` = '%s' OR `name` = '%s'", this.list_char[0],
                 this.list_char[1], this.list_char[2]);
         try ( Connection connection = SQL.gI().getConnection();  Statement ps = connection.createStatement(ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);  ResultSet rs
@@ -552,7 +569,15 @@ public class Session implements Runnable {
                 m.writer().writeUTF(name);
                 JSONArray jsar = (JSONArray) JSONValue.parse(rs.getString("body"));
                 if (jsar == null) {
-                    return;
+                    System.out.println("send_listchar_board: SKIP " + name + " (body=null) - writing dummy");
+                    m.writer().writeByte(0); m.writer().writeByte(0); m.writer().writeByte(0);
+                    m.writer().writeByte(0);
+                    m.writer().writeShort(1);
+                    m.writer().writeByte(0);
+                    m.writer().writeByte(1);
+                    m.writer().writeByte(0);
+                    m.writer().writeShort(-1);
+                    continue;
                 }
                 m.writer().writeByte(Byte.parseByte(jsar.get(0).toString())); // head
                 m.writer().writeByte(Byte.parseByte(jsar.get(2).toString())); // hair
@@ -561,24 +586,25 @@ public class Session implements Runnable {
                 jsar.clear();
                 List<Part_player> itemwear = new ArrayList<>();
                 jsar = (JSONArray) JSONValue.parse(rs.getString("itemwear"));
-                if (jsar == null) {
-                    return;
-                }
-                for (int i3 = 0; i3 < jsar.size(); i3++) {
-                    JSONArray jsar2 = (JSONArray) JSONValue.parse(jsar.get(i3).toString());
-                    if (jsar2 == null) {
-                        return;
+                if (jsar != null) {
+                    for (int i3 = 0; i3 < jsar.size(); i3++) {
+                        JSONArray jsar2 = (JSONArray) JSONValue.parse(jsar.get(i3).toString());
+                        if (jsar2 == null) {
+                            continue;
+                        }
+                        byte index_wear = Byte.parseByte(jsar2.get(9).toString());
+                        if (index_wear != 0 && index_wear != 1 && index_wear != 6 && index_wear != 7 && index_wear != 10) {
+                            continue;
+                        }
+                        Part_player temp = new Part_player();
+                        temp.type = Byte.parseByte(jsar2.get(2).toString());
+                        temp.part = Byte.parseByte(jsar2.get(6).toString());
+                        itemwear.add(temp);
                     }
-                    byte index_wear = Byte.parseByte(jsar2.get(9).toString());
-                    if (index_wear != 0 && index_wear != 1 && index_wear != 6 && index_wear != 7 && index_wear != 10) {
-                        continue;
-                    }
-                    Part_player temp = new Part_player();
-                    temp.type = Byte.parseByte(jsar2.get(2).toString());
-                    temp.part = Byte.parseByte(jsar2.get(6).toString());
-                    itemwear.add(temp);
+                    jsar.clear();
+                } else {
+                    System.out.println("send_listchar_board: WARN " + name + " itemwear=null, sending 0 parts");
                 }
-                jsar.clear();
                 m.writer().writeByte(itemwear.size()); // size part
                 for (int j = 0; j < itemwear.size(); j++) {
                     m.writer().writeByte(itemwear.get(j).type);
@@ -600,10 +626,13 @@ public class Session implements Runnable {
                 } else {
                     m.writer().writeShort(-1); // clan in4
                 }
+                System.out.println("send_listchar_board: wrote char " + name + " id=" + rs.getShort("id") + " parts=" + itemwear.size() + " clan=" + (clan != null ? clan.name_clan_shorted : "none"));
             }
+            System.out.println("send_listchar_board: msg13 data size=" + m.getData().length + " chars=" + row);
             addmsg(m);
             m.cleanup();
-        } catch (SQLException e) {
+        } catch (Exception e) {
+            System.out.println("send_listchar_board ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -616,7 +645,7 @@ public class Session implements Runnable {
         int time_ = Manager.gI().ip_create_char.get(this.ip);
         if (time_ > 2) {
             notice_create_char("Đã quá lượt tạo nhân vật hôm nay!!");
-            // return;
+            return;
         }
         if (this.list_char == null || !this.list_char[2].isEmpty()) {
             return;
@@ -627,7 +656,7 @@ public class Session implements Runnable {
         byte eye = m.reader().readByte();
         byte head = m.reader().readByte();
         //
-        Pattern p = Pattern.compile("^[a-zA-Z0-9]{6,10}$");
+        Pattern p = Pattern.compile("^[a-zA-Z0-9]{4,15}$");
         if (!p.matcher(name).matches()) {
             notice_create_char("tên không hợp lệ, nhập lại đi!!");
             return;
@@ -711,9 +740,7 @@ public class Session implements Runnable {
 			      String.format("[453,455,%s,%s,459]", Medal_Material.m_yellow[0], Medal_Material.m_violet[0]));
 			ps.setNString(40, "[-1,0,0,0]");
             jsar.clear();
-            if (!ps.execute()) {
-                connnect.commit();
-            }
+            ps.executeUpdate();
             //
             for (int i = 0; i < this.list_char.length; i++) {
                 if (this.list_char[i].isEmpty()) {
@@ -741,10 +768,8 @@ public class Session implements Runnable {
             query = query.substring(0, query.length() - 1);
             query += "]";
             try ( Connection conn = SQL.gI().getConnection();  Statement statement = conn.createStatement()) {
-                if (statement.executeUpdate(
-                        "UPDATE `account` SET `char` = '" + query + "' WHERE `user` = '" + this.user + "';") > 0) {
-                    conn.commit();
-                }
+                statement.executeUpdate(
+                        "UPDATE `account` SET `char` = '" + query + "' WHERE `user` = '" + this.user + "';");
             } catch (SQLException e) {
                 e.printStackTrace();
             }
@@ -770,10 +795,8 @@ public class Session implements Runnable {
             js.add(s);
         });
         try ( Connection conn = SQL.gI().getConnection();  Statement statement = conn.createStatement()) {
-            if (statement.executeUpdate(
-                    "UPDATE `account` SET `checkmocnap` = '" + js.toJSONString() + "' WHERE `user` = '" + this.user + "';") > 0) {
-                conn.commit();
-            }
+            statement.executeUpdate(
+                    "UPDATE `account` SET `checkmocnap` = '" + js.toJSONString() + "' WHERE `user` = '" + this.user + "';");
         } catch (SQLException e) {
             e.printStackTrace();
         }

@@ -55,6 +55,10 @@ public class Clan {
 	}
     
     public synchronized void clan_process(Session conn, Message m2, int type) throws IOException {
+        if (conn.p.is_detu_training) {
+            Service.send_notice_box(conn, "Trong trạng thái luyện Đệ Tử không thể tham gia hoạt động bang hội!");
+            return;
+        }
         switch (type) {
             case 21: {
                 this.open_box_clan(conn);
@@ -476,6 +480,10 @@ public class Clan {
     }
 
     public synchronized static boolean create_clan(Session conn, String name, String name_shorted) throws IOException {
+        if (conn.p.is_detu_training) {
+            Service.send_notice_box(conn, "Trong trạng thái luyện Đệ Tử không thể tạo bang hội!");
+            return false;
+        }
         for (Clan clan : entrys) {
             if (clan.name_clan.equals(name)) {
                 Service.send_notice_box(conn, "Tên này đã tồn tại, xin hãy chọn lại!");
@@ -542,9 +550,7 @@ public class Clan {
                 + "', '" + temp.rule + "', '" + temp.notice + "', " + temp.vang + ", " + temp.kimcuong + ", "
                 + temp.max_mem + ", " + temp.icon + ")";
         try ( Connection connection = SQL.gI().getConnection();  Statement statement = connection.createStatement();) {
-            if (statement.executeUpdate(query) > 0) {
-                connection.commit();
-            }
+            statement.executeUpdate(query);
         } catch (SQLException e) {
             e.printStackTrace();
             return false;
@@ -671,7 +677,6 @@ public class Clan {
                 }
             }
             ps.executeBatch();
-            conn.commit();
             //
             ps.close();
             ps = conn.prepareStatement("DELETE FROM `clan` WHERE `name` = ?;");
@@ -685,7 +690,6 @@ public class Clan {
                 }
             }
             ps.executeBatch();
-            conn.commit();
             //
             ps.close();
             conn.close();

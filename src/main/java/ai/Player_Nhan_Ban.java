@@ -4,12 +4,14 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import client.Player;
+import core.Service;
 import core.Util;
 import event_daily.ChienTruong;
 import io.Message;
 import map.Map;
 import map.MapService;
 import template.EffTemplate;
+import template.SpecialDamage;
 
 public class Player_Nhan_Ban {
 	public static short[][] LOCATION = new short[][] { //
@@ -293,7 +295,11 @@ public class Player_Nhan_Ban {
 				if (dame > 2_000_000_000) {
 					dame = 2_000_000_000;
 				}
+				SpecialDamage spDame = SpecialDamage.calculate(p);
 				temp.hp -= dame;
+				if (spDame.damage > 0) {
+					temp.hp -= spDame.damage;
+				}
 				if (temp.hp <= 0) {
 					temp.hp = 0;
 					temp.isdie = true;
@@ -334,10 +340,12 @@ public class Player_Nhan_Ban {
 				}
 				m.writer().writeInt((int) Math.min(p.hp, Integer.MAX_VALUE));
 				m.writer().writeInt(p.mp);
-				m.writer().writeByte(11);
-				m.writer().writeInt(0);
+				m.writer().writeByte(spDame.damage > 0 ? (spDame.type == SpecialDamage.TYPE_LIGHT ? 10 : 11) : 11);
+				m.writer().writeInt(spDame.damage > 0 ? spDame.damage : 0);
 				MapService.send_msg_player_inside(map, p, m, true);
 				m.cleanup();
+
+
 				break;
 			}
 		}

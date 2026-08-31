@@ -371,7 +371,18 @@ INSERT INTO `giftcode` (`id`, `giftname`, `item3`, `item4`, `item7`, `vang`, `ng
 (11, '600member', '[]', '[]', '[[472,10],[14,20]]', '3000000', '10000', NULL, 1000, NULL),
 (12, 'naythicode', '[[3613,1],[3614,1]]', '[]', '[[14,15]]', '0', '10000', NULL, 1000, NULL),
 (13, 'dhtest', '[[4767,1]]', '[]', '[]', '1000000', '10000', 'Cảm ơn ', 1000, NULL),
-(14, 'sach110', '[[4577,1],[4578,1],[4579,1],[4580,1],[4581,1],[4582,1],[4583,1],[4584,1]]', '[]', '[]', '0', '0', 'Oke bb', 1000, NULL);
+(14, 'sach110', '[[4577,1],[4578,1],[4579,1],[4580,1],[4581,1],[4582,1],[4583,1],[4584,1]]', '[]', '[]', '0', '0', 'Oke bb', 1000, NULL),
+(100, 'testdaibang', '[[3269,1]]', '[]', '[]', '10000000', '10000', 'Code Test Pet Dai Bang', 1000, NULL);
+
+-- =====================================================
+-- XOÁ DỮ LIỆU NGƯỜI ĐÃ NHẬP CODE sach110
+-- Chạy trên database hso2 (MySQL 5.7+)
+-- =====================================================
+-- Xoá 'sach110' khỏi mảng giftcode JSON của tất cả player
+UPDATE `player` SET `giftcode` = REPLACE(REPLACE(REPLACE(`giftcode`, ',"sach110"', ''), '"sach110",', ''), '"sach110"', '');
+UPDATE `player` SET `giftcode` = '[]' WHERE `giftcode` = '' OR `giftcode` IS NULL OR `giftcode` = '[ ]';
+-- Reset limit sach110 về 1000 (cho phép nhập lại)
+UPDATE `giftcode` SET `limit` = 1000 WHERE `giftname` = 'sach110';
 
 -- --------------------------------------------------------
 
@@ -5482,7 +5493,7 @@ INSERT INTO `item4` (`id`, `icon`, `price`, `name`, `content`, `typepotion`, `mo
 (258, 224, 1, 'Quả sung', 'Vật phẩm sự kiện', 73, 1, 0, 1, 0),
 (259, 225, 1, 'Thuốc nổ', 'Vật phẩm sự kiện', 73, 1, 0, 1, 0),
 (260, 155, 10, 'Lồng đèn bươm bướm', 'Có tác dụng trong 7 ngày - Tăng 25% exp - Tăng 10% max hp+10% phòng thủ', 19, 1, 0, 1, 0),
-(261, 226, 1000, 'Thuốc biến dị', 'Giảm 50% exp hiện tại, không thể sử dụng khi đang ở cấp độ 20,30 và 40', 74, 1, 0, 1, 1),
+(261, 226, 1000, 'Thuốc biến dị', 'Giảm 50% exp hiện tại, không thể sử dụng khi đang ở cấp độ 1', 74, 1, 0, 1, 1),
 (262, 227, 1, 'Radar mặt trăng', 'Dùng dò tìm đá trăng khuyết', 75, 1, 0, 1, 0),
 (263, 129, 2000, 'Lồng đèn vàng vĩnh viễn', 'Tăng 3% exp, rớt nguyên liệu thịt khi đánh quái', 62, 1, 0, 1, 0),
 (264, 153, 2000, 'Lồng đèn hoa sen vĩnh viễn', 'Tăng 3% rớt vàng, rớt nguyên liệu thịt khi đánh quái', 62, 1, 0, 1, 0),
@@ -6196,18 +6207,18 @@ INSERT INTO `itemoption` (`id`, `name`, `colorInfoItem`, `isPercentInfoItem`) VA
 (74, 'X.hiện crit ánh sáng', 2, 1),
 (75, '+ St crit ánh sáng', 2, 1),
 (76, 'X.hiện bỏng lửa', 6, 1),
-(77, '-Bỏng lửa', 6, 2),
+(77, 'Bỏng lửa', 6, 2),
 (78, 'X.hiện bỏng lạnh', 1, 1),
 (79, 'Bỏng lạnh', 1, 2),
 (80, 'Giáp hắc ám', 4, 1),
 (81, 'Tàng hình', 4, 2),
 (82, 'X.hiện tàng hình', 4, 1),
 (83, 'X.hiện giảm cooldown', 2, 1),
-(84, '- Giảm cooldown', 2, 2),
+(84, 'Giảm cooldown', 2, 2),
 (85, 'X.hiện khiên ma thuật', 3, 1),
-(86, '- Khiên ma thuật', 3, 2),
+(86, 'Khiên ma thuật', 3, 2),
 (87, 'X.hiện lú lẫn', 3, 1),
-(88, '- Lú lẫn', 3, 2),
+(88, 'Lú lẫn', 3, 2),
 (89, 'Kháng tất cả', 4, 1),
 (90, 'Giảm st vật lý', 5, 1),
 (91, 'Giảm st băng', 1, 1),
@@ -6217,7 +6228,7 @@ INSERT INTO `itemoption` (`id`, `name`, `colorInfoItem`, `isPercentInfoItem`) VA
 (95, 'Giảm kháng tất cả', 4, 1),
 (96, 'Số dòng ẩn có thể có', 1, 0),
 (97, 'X.hiện vết thương sâu', 6, 1),
-(98, '-Vết thương sâu', 6, 2),
+(98, 'Vết thương sâu', 6, 2),
 (99, 'Chính xác', 5, 1),
 (100, 'Trời giáng', 4, 0),
 (101, 'Kháng phép', 1, 0),

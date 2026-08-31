@@ -34,7 +34,10 @@ public class Process_Yes_no_box {
         if (id != conn.p.id) {
             return;
         }
-        byte type = m.reader().readByte(); // type
+        int type = m.reader().readByte(); // type
+        if (type < 0) {
+            type += 256;
+        }
         byte value = m.reader().readByte(); // value
         if (value != 1) {
             switch (type) {
@@ -994,6 +997,61 @@ public class Process_Yes_no_box {
                         return;
                     }
                     conn.p.point_active[0] += 1;
+                    break;
+                }
+                case 100: {
+                    // Xử lý xác nhận vào Khu 2
+                    if (!Map.has_monster(conn.p.map.map_id)) {
+                        // Map khong co quai: FREE, chuyen vao Khu 2 luon
+                        Map[] mapAll = Map.get_map_by_id(conn.p.map.map_id);
+                        if (mapAll != null && mapAll.length > 1) {
+                            Map targetMap = mapAll[1];
+                            if (targetMap.players.size() >= targetMap.maxplayer) {
+                                Service.send_notice_box(conn, "Khu 2 đã đầy, hãy thử lại sau!");
+                                return;
+                            }
+                            if (conn.p.map.zone_id != 1) {
+                                MapService.leave(conn.p.map, conn.p);
+                                conn.p.map = targetMap;
+                                MapService.enter(conn.p.map, conn.p);
+                            }
+                        }
+                        return;
+                    }
+                    // Map co quai
+                    Map[] mapAll = Map.get_map_by_id(conn.p.map.map_id);
+                    if (mapAll == null || mapAll.length <= 1) {
+                        Service.send_notice_box(conn, "Không tìm thấy Khu 2 của map hiện tại!");
+                        return;
+                    }
+                    Map targetMap = mapAll[1];
+                    if (targetMap.players.size() >= targetMap.maxplayer) {
+                        Service.send_notice_box(conn, "Khu 2 đã đầy, hãy thử lại sau!");
+                        return;
+                    }
+                    EffTemplate efKhu2 = conn.p.get_eff(-127);
+                    if (efKhu2 != null && efKhu2.time > System.currentTimeMillis()) {
+                        // Da co hieu luc Khu 2 con han
+                        if (conn.p.map.zone_id != 1) {
+                            MapService.leave(conn.p.map, conn.p);
+                            conn.p.map = targetMap;
+                            MapService.enter(conn.p.map, conn.p);
+                        }
+                        return;
+                    }
+                    if (conn.p.get_ngoc() < 50) {
+                        Service.send_notice_box(conn, "Bạn không đủ 50 Ngọc để vào Khu 2!");
+                        return;
+                    }
+                    conn.p.update_ngoc(-50);
+                    conn.p.item.char_inventory(5);
+                    conn.p.add_eff(-127, 1, 60 * 60 * 1000);
+                    Service.send_notice_box(conn, "Đã trừ 50 Ngọc. Bạn có 1 giờ trải nghiệm tại Khu 2!");
+                    if (conn.p.map.zone_id != 1) {
+                        MapService.leave(conn.p.map, conn.p);
+                        conn.p.map = targetMap;
+                        MapService.enter(conn.p.map, conn.p);
+                    }
                     break;
                 }
             }

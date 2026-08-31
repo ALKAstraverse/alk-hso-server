@@ -46,11 +46,7 @@ public class Item {
                         m.writer().writeByte(temp.color); // color name
                         m.writer().writeByte(1); // can sell
                         m.writer().writeByte(temp.islock ? 0 : 1); // can trade
-                        m.writer().writeByte(temp.op.size()); // size
-                        for (int j = 0; j < temp.op.size(); j++) {
-                            m.writer().writeByte(temp.op.get(j).id);
-                            m.writer().writeInt(temp.op.get(j).getParam(temp.tier));
-                        }
+                        temp.writeItemOptions(m, p.clazz);
                         //
                         if (temp.time_use != 0) {
                             long time_use = temp.time_use - System.currentTimeMillis();
@@ -130,11 +126,7 @@ public class Item {
                         m.writer().writeByte(temp.color); // color name
                         m.writer().writeByte(1); // can sell
                         m.writer().writeByte(temp.islock ? 0 : 1); // can trade
-                        m.writer().writeByte(temp.op.size()); // size
-                        for (int j = 0; j < temp.op.size(); j++) {
-                            m.writer().writeByte(temp.op.get(j).id);
-                            m.writer().writeInt(temp.op.get(j).getParam(temp.tier));
-                        }
+                        temp.writeItemOptions(m, p.clazz);
                         if (temp.time_use != 0) {
                             long time_use = temp.time_use - System.currentTimeMillis();
                             time_use /= 3_600_000;
@@ -356,13 +348,21 @@ public class Item {
         }
     }
 
-    public void add_item_bag3(Item3 buffer) {
+    public boolean add_item_bag3(Item3 buffer) {
         for (int j = 0; j < bag3.length; j++) {
             if (bag3[j] == null) {
                 bag3[j] = buffer;
-                break;
+                return true;
             }
         }
+        // If bag is full, try moving to storage box
+        for (int j = 0; j < box3.length; j++) {
+            if (box3[j] == null) {
+                box3[j] = buffer;
+                return true;
+            }
+        }
+        return false;
     }
 
     public void add_item_box3(Item3 buffer) {
@@ -371,6 +371,25 @@ public class Item {
                 box3[j] = buffer;
                 break;
             }
+        }
+    }
+
+    public boolean has_item(int type, int id) {
+        switch (type) {
+            case 3: {
+                return bag3[id] != null;
+            }
+            case 4:
+            case 7: {
+                for (int j = bag47.size() - 1; j >= 0; j--) {
+                    if (bag47.get(j).category == type && bag47.get(j).id == id && bag47.get(j).quantity > 0) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            default:
+                return false;
         }
     }
 

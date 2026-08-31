@@ -46,60 +46,68 @@ public class Body {
                 if (ef != null) {
                     param += (p.point1 * (ef.param / 100)) / 100;
                 }
-                for (Pet temp : p.mypet) {
-                    if (temp.is_follow) {
-                        for (Option_pet op : temp.op) {
-                            if (op.id == 23) {
-                                param += op.param;
-                                break;
+                if (p.mypet != null) {
+                    for (Pet temp : p.mypet) {
+                        if (temp.is_follow) {
+                            for (Option_pet op : temp.op) {
+                                if (op.id == 23) {
+                                    param += op.param;
+                                    break;
+                                }
                             }
+                            break;
                         }
-                        break;
                     }
                 }
                 break;
             }
             case 24: {
                 param += total_item_param(i);
-                for (Pet temp : p.mypet) {
-                    if (temp.is_follow) {
-                        for (Option_pet op : temp.op) {
-                            if (op.id == 24) {
-                                param += op.param;
-                                break;
+                if (p.mypet != null) {
+                    for (Pet temp : p.mypet) {
+                        if (temp.is_follow) {
+                            for (Option_pet op : temp.op) {
+                                if (op.id == 24) {
+                                    param += op.param;
+                                    break;
+                                }
                             }
+                            break;
                         }
-                        break;
                     }
                 }
                 break;
             }
             case 25: {
                 param += total_item_param(i);
-                for (Pet temp : p.mypet) {
-                    if (temp.is_follow) {
-                        for (Option_pet op : temp.op) {
-                            if (op.id == 25) {
-                                param += op.param;
-                                break;
+                if (p.mypet != null) {
+                    for (Pet temp : p.mypet) {
+                        if (temp.is_follow) {
+                            for (Option_pet op : temp.op) {
+                                if (op.id == 25) {
+                                    param += op.param;
+                                    break;
+                                }
                             }
+                            break;
                         }
-                        break;
                     }
                 }
                 break;
             }
             case 26: {
                 param += total_item_param(i);
-                for (Pet temp : p.mypet) {
-                    if (temp.is_follow) {
-                        for (Option_pet op : temp.op) {
-                            if (op.id == 26) {
-                                param += op.param;
-                                break;
+                if (p.mypet != null) {
+                    for (Pet temp : p.mypet) {
+                        if (temp.is_follow) {
+                            for (Option_pet op : temp.op) {
+                                if (op.id == 26) {
+                                    param += op.param;
+                                    break;
+                                }
                             }
+                            break;
                         }
-                        break;
                     }
                 }
                 break;
@@ -110,11 +118,12 @@ public class Body {
 
     public int total_item_param(int id) {
         int param = 0;
+        byte byteId = (byte) id;
         for (int i = 0; i < p.item.wear.length; i++) {
             Item3 temp = p.item.wear[i];
             if (temp != null) {
                 for (Option op : temp.op) {
-                    if (op.id == id) {
+                    if (op.id == id || op.id == byteId || Byte.toUnsignedInt(op.id) == id) {
                         param += op.getParam(temp.tier);
                     }
                 }
@@ -123,10 +132,9 @@ public class Body {
 
         for (int i = 0; i < p.tutien[0]; i++) {
             for (int j = 0; j < TuTien.op[i].length; j++) {
-                if (TuTien.op[i][j] == id) {
+                if (TuTien.op[i][j] == id || (byte)TuTien.op[i][j] == byteId) {
                     param += TuTien.par[i][j];
                 }
-
             }
         }
 
@@ -219,7 +227,8 @@ public class Body {
     }
 
     public int get_param_view_in4(int type) {
-        switch (type) {
+        int uType = Byte.toUnsignedInt((byte) type);
+        switch (uType) {
             case 0: {
                 return get_dame_physical();
             }
@@ -266,6 +275,22 @@ public class Body {
             case 28:
             case 22: {
                 return (total_item_param(type) + total_skill_param(type));
+            }
+            case 112: {
+                return p.point_active != null && p.point_active.length > 2 ? p.point_active[2] : 0;
+            }
+            case 181: { // Điểm nạp ngọc
+                try {
+                    return p.get_tongnap();
+                } catch (Exception e) {
+                    return 0;
+                }
+            }
+            case 182: { // Điểm dùng ngọc / cộng ngọc
+                return p.chucphuc;
+            }
+            case 183: { // Điểm chiến công
+                return p.pointarena;
             }
             default: {
                 return total_item_param(type);
@@ -474,11 +499,13 @@ public class Body {
 
     public int get_dame_prop(int type) {
         long dprop = 0;
+        boolean match = false;
         switch (p.clazz) {
             case 0: {
                 if (type == 2) {
                     dprop += get_point(1) * 4;
                     dprop += total_item_param(2);
+                    match = true;
                 }
                 break;
             }
@@ -486,6 +513,7 @@ public class Body {
                 if (type == 4) {
                     dprop += get_point(1) * 4;
                     dprop += total_item_param(4);
+                    match = true;
                 }
                 break;
             }
@@ -493,6 +521,7 @@ public class Body {
                 if (type == 1) {
                     dprop += get_point(4) * 4;
                     dprop += total_item_param(1);
+                    match = true;
                 }
                 break;
             }
@@ -500,9 +529,13 @@ public class Body {
                 if (type == 3) {
                     dprop += get_point(4) * 4;
                     dprop += total_item_param(3);
+                    match = true;
                 }
                 break;
             }
+        }
+        if (!match) {
+            return 0;
         }
         dprop += (p.luyenthe * 20);
         dprop += ((dprop * (get_percent_dameProp(type) / 100)) / 100);
@@ -582,5 +615,81 @@ public class Body {
             param = 0;
         }
         return param;
+    }
+
+    // Equipment combat effect option IDs (supports both positive itemoption.id and signed byte id)
+    // Positive IDs: 76=X.hiện bỏng lửa, 77=Bỏng lửa (time), 78=X.hiện bỏng lạnh, 79=Bỏng lạnh (time)
+    // 80=Giáp hắc ám, 81=Tàng hình (time), 82=X.hiện tàng hình, 83=X.hiện giảm cooldown, 84=Giảm cooldown
+    // 85=X.hiện khiên ma thuật, 86=Khiên ma thuật (time), 87=X.hiện lú lẫn, 88=Lú lẫn (time)
+    // 97=X.hiện vết thương sâu, 98=Vết thương sâu (time)
+    // Negative byte / Unsigned IDs: 131/-125=Bộc phá, 133/-123=Miễn st lửa, 134/-122=Miễn st độc, 135/-121=Miễn st vl
+    // 136/-120=Miễn st băng, 137/-119=Miễn st điện, 142/-114=Giáp bảo hộ
+    // 139/-117=Hung tàn, 140/-116=Mù mắt, 141/-115=Thiêu cháy
+    // 164/-92=Tàn phế, 166/-90=Ngu đần, 168/-88=Bất tử
+    // 170/-86=Chính xác, 171/-85=Giáp bạch kim, 173/-83=Giáp thiên sứ, 175/-81=Giáp vệ binh
+    public int get_equipment_effect(int optionId) {
+        int maxParam = 0;
+        byte byteId = (byte) optionId;
+        for (int i = 0; i < p.item.wear.length; i++) {
+            Item3 temp = p.item.wear[i];
+            if (temp != null) {
+                for (Option op : temp.op) {
+                    if ((op.id == optionId || op.id == byteId || Byte.toUnsignedInt(op.id) == optionId)
+                            && op.getParam(temp.tier) > maxParam) {
+                        maxParam = op.getParam(temp.tier);
+                    }
+                }
+            }
+        }
+        if (p.mypet != null) {
+            for (Pet pet : p.mypet) {
+                if (pet != null && pet.is_follow && pet.op != null) {
+                    for (Option_pet op : pet.op) {
+                        if ((op.id == optionId || op.id == byteId || Byte.toUnsignedInt((byte) op.id) == optionId)
+                                && op.param > maxParam) {
+                            maxParam = op.param;
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        return maxParam;
+    }
+
+    // check if any equipped item has a combat effect option, return its param (chance %)
+    public boolean has_combat_effect(int optionId) {
+        return get_equipment_effect(optionId) > 0;
+    }
+
+    // lay thoi gian hieu ung (ms) tu option thoi gian (ispercent=2)
+    // neu trang bi co dong thoi gian thi lay param dong do (vi du param 5000 = 5s = 5000ms), neu khong co tra ve defaultTime
+    public int get_effect_duration(int durationOptionId, int defaultTime) {
+        int dur = get_equipment_effect(durationOptionId);
+        if (dur > 0) {
+            // Neu param duoc luu dang giay nho (vd 3 -> 3000ms, 5 -> 5000ms) hoac dang ms (vd 5000)
+            if (dur <= 60) {
+                return dur * 1000;
+            }
+            return dur;
+        }
+        return defaultTime;
+    }
+
+    public int get_max_crit_damage_param(int optionId) {
+        int maxParam = 100; // default 1.00x = 100
+        byte byteId = (byte) optionId;
+        for (int i = 0; i < p.item.wear.length; i++) {
+            Item3 temp = p.item.wear[i];
+            if (temp != null) {
+                for (Option op : temp.op) {
+                    if ((op.id == optionId || op.id == byteId || Byte.toUnsignedInt(op.id) == optionId)
+                            && op.getParam(temp.tier) > maxParam) {
+                        maxParam = op.getParam(temp.tier);
+                    }
+                }
+            }
+        }
+        return maxParam;
     }
 }

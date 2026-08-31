@@ -150,6 +150,12 @@ public class Manager {
     }
 
     private boolean load_database() throws SQLException {
+        // Ensure player table has detu column
+        try (Connection c = SQL.gI().getConnection(); Statement st = c.createStatement()) {
+            st.execute("ALTER TABLE `player` ADD COLUMN `detu` TEXT DEFAULT NULL;");
+        } catch (Exception e) {
+            // column already exists
+        }
         // load item3
         Connection conn = SQL.gI().getConnection();
         Statement ps = conn.createStatement();
@@ -333,30 +339,39 @@ public class Manager {
                 case 0: {
                     switch (this.event) {
                         case 1: {
-                            itempoitionsell = new short[jsar.size() + 4];
+                            itempoitionsell = new short[jsar.size() + 7];
                             for (int i = 0; i < jsar.size(); i++) {
                                 itempoitionsell[i] = Short.parseShort(jsar.get(i).toString());
                             }
-                            itempoitionsell[itempoitionsell.length - 4] = 113;
-                            itempoitionsell[itempoitionsell.length - 3] = 114;
-                            itempoitionsell[itempoitionsell.length - 2] = 115;
-                            itempoitionsell[itempoitionsell.length - 1] = 116;
+                            itempoitionsell[itempoitionsell.length - 7] = 113;
+                            itempoitionsell[itempoitionsell.length - 6] = 114;
+                            itempoitionsell[itempoitionsell.length - 5] = 115;
+                            itempoitionsell[itempoitionsell.length - 4] = 116;
+                            itempoitionsell[itempoitionsell.length - 3] = 220; // Kẹo hồ lô
+                            itempoitionsell[itempoitionsell.length - 2] = 219; // Bùa gọi đệ tử
+                            itempoitionsell[itempoitionsell.length - 1] = 227; // Vé luyện đệ tử
                             break;
                         }
                         	case 2: {
-							itempoitionsell = new short[jsar.size() + 2];
+							itempoitionsell = new short[jsar.size() + 5];
 							for (int i = 0; i < jsar.size(); i++) {
 								itempoitionsell[i] = Short.parseShort(jsar.get(i).toString());
 							}
-							itempoitionsell[itempoitionsell.length - 2] = 141;
-							itempoitionsell[itempoitionsell.length - 1] = 140;
+							itempoitionsell[itempoitionsell.length - 5] = 141;
+							itempoitionsell[itempoitionsell.length - 4] = 140;
+							itempoitionsell[itempoitionsell.length - 3] = 220; // Kẹo hồ lô
+							itempoitionsell[itempoitionsell.length - 2] = 219; // Bùa gọi đệ tử
+							itempoitionsell[itempoitionsell.length - 1] = 227; // Vé luyện đệ tử
 							break;
 						}
                         default: {
-                            itempoitionsell = new short[jsar.size()];
-                            for (int i = 0; i < itempoitionsell.length; i++) {
+                            itempoitionsell = new short[jsar.size() + 3];
+                            for (int i = 0; i < jsar.size(); i++) {
                                 itempoitionsell[i] = Short.parseShort(jsar.get(i).toString());
                             }
+                            itempoitionsell[itempoitionsell.length - 3] = 220; // Kẹo hồ lô
+                            itempoitionsell[itempoitionsell.length - 2] = 219; // Bùa gọi đệ tử
+                            itempoitionsell[itempoitionsell.length - 1] = 227; // Vé luyện đệ tử
                             break;
                         }
                     }

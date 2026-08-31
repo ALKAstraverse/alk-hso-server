@@ -30,6 +30,7 @@ import io.Session;
 import map.Dungeon;
 import map.Map;
 import map.MapService;
+import map.Mob_in_map;
 import map.Vgo;
 import template.EffTemplate;
 import template.Item3;
@@ -37,6 +38,7 @@ import template.Item47;
 import template.ItemTemplate3;
 import template.Level;
 import template.LvSkill;
+import template.Mob_MoTaiNguyen;
 import template.Option;
 import template.Part_fashion;
 import template.Part_player;
@@ -51,6 +53,24 @@ import template.MiNuong;
 
 public class Player {
     public MiNuong minuong;
+    public Disciple detu;
+    public boolean is_detu_training = false;
+    public byte main_clazz;
+    public short main_level;
+    public long main_exp;
+    public byte main_head;
+    public byte main_eye;
+    public byte main_hair;
+    public int main_point1, main_point2, main_point3, main_point4;
+    public int main_tiemnang;
+    public short main_kynang;
+    public byte[] main_skill_point;
+    public Item3[] main_wear;
+    public Skill[] main_skills;
+    public boolean main_pet_follow;
+    public byte[] main_fashion;
+    public String main_name;
+    public short id_dua_be = -1; // -1 if not escorting child
 	public int id_henshin = -1;
 	public long time_henshin = -1;
 	public long time_use_item_arena = System.currentTimeMillis() + 250_000L;
@@ -136,6 +156,8 @@ public class Player {
     public Party party;
     public long time_use_poition_hp;
     public long time_use_poition_mp;
+    public Mob_in_map currentTarget;
+    public Mob_MoTaiNguyen currentTargetMo;
     public byte enough_time_disconnect;
     public int dame_affect_special_sk;
     public int hp_restore;
@@ -170,6 +192,20 @@ public class Player {
     public short id_hop_ngoc;
     public List<Item3> list_thao_kham_ngoc;
     public int time_atk_ngoc_hon_nguyen = 0;
+    public int hit_count_ngoc_hon_nguyen = 0;
+    public int hit_count_ngoc_khai_hoan = 0;
+    public long time_ngoc_luc_bao = 0;
+    // === NEW COMBAT EFFECTS ===
+    public int giap_bao_ho_hit_count = 0;      // giap bao ho: so hit lien tiep
+    public long giap_bao_ho_time = 0;          // giap bao ho: thoi gian hieu ung
+    public long time_boc_pha_cd = 0;           // boc pha cooldown
+    public int hung_tan_hit_count = 0;         // hung tan: so hit da danh
+    public int hung_tan_required_hits = 0;     // hung tan: so hit yeu cau
+    public long time_hung_tan = 0;             // hung tan: thoi gian ton tai
+    public long time_thieu_chay_cd = 0;        // thieu chay cooldown
+    public long time_bat_tu_cd = 0;            // bat tu cooldown
+    public long time_ngu_dan_target = 0;       // ngu dan: thoi gian tat pet doi thu
+    public long time_mu_mat_target = 0;        // mu mat: thoi gian mu mat doi thu
     public short id_ngoc_tinh_luyen = -1;
     public Wedding it_wedding;
     public String[] in4_wedding;
@@ -625,6 +661,13 @@ public class Player {
             }
             jsar.clear();
             myclan = Clan.get_clan_of_player(this.name);
+            // load detu
+            try {
+                String detuStr = rs.getString("detu");
+                this.detu = Disciple.fromJson(this, detuStr);
+            } catch (Exception e) {
+                this.detu = null;
+            }
             //
         } catch (SQLException e) {
             e.printStackTrace();
@@ -759,6 +802,42 @@ public class Player {
         if (!already_setup) {
             return;
         }
+        if (is_detu_training && detu != null) {
+            detu.level = this.level;
+            detu.exp = this.exp;
+            detu.head = this.head;
+            detu.eye = this.eye;
+            detu.hair = this.hair;
+            detu.point1 = this.point1;
+            detu.point2 = this.point2;
+            detu.point3 = this.point3;
+            detu.point4 = this.point4;
+            detu.tiemnang = this.tiemnang;
+            detu.kynang = this.kynang;
+            System.arraycopy(this.skill_point, 0, detu.skill_point, 0, this.skill_point.length);
+            System.arraycopy(this.item.wear, 0, detu.wear, 0, this.item.wear.length);
+            detu.stopTraining();
+            is_detu_training = false;
+
+            this.clazz = main_clazz;
+            this.level = main_level;
+            this.exp = main_exp;
+            this.head = main_head;
+            this.eye = main_eye;
+            this.hair = main_hair;
+            this.point1 = main_point1;
+            this.point2 = main_point2;
+            this.point3 = main_point3;
+            this.point4 = main_point4;
+            this.tiemnang = main_tiemnang;
+            this.kynang = main_kynang;
+            this.pet_follow = main_pet_follow;
+            System.arraycopy(main_skill_point, 0, this.skill_point, 0, this.skill_point.length);
+            System.arraycopy(main_wear, 0, this.item.wear, 0, this.item.wear.length);
+            this.skills = main_skills;
+            this.fashion = main_fashion;
+            this.name = main_name;
+        }
         try ( Connection connection = SQL.gI().getConnection();  Statement ps = connection.createStatement()) {
             String a = "`level` = " + level;
             a += ",`exp` = " + exp;
@@ -802,7 +881,7 @@ public class Player {
             //
             for (int i = 0; i < list_eff.size(); i++) {
                 EffTemplate temp = list_eff.get(i);
-                if (temp.id != -126 && temp.id != -125) {
+                if (temp.id != -126 && temp.id != -125 && temp.id != -127) {
                     continue;
                 }
 
@@ -1054,10 +1133,13 @@ public class Player {
             a += ",`point2` = " + point2;
             a += ",`point3` = " + point3;
             a += ",`point4` = " + point4;
-
-            if (ps.executeUpdate("UPDATE `player` SET " + a + " WHERE `id` = " + this.id + ";") > 0) {
-                connection.commit();
+            if (detu != null) {
+                a += ",`detu` = '" + detu.toJson() + "'";
+            } else {
+                a += ",`detu` = NULL";
             }
+
+            ps.executeUpdate("UPDATE `player` SET " + a + " WHERE `id` = " + this.id + ";");
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -1078,6 +1160,147 @@ public class Player {
 			nv_tinh_tu[3] = 0;
             //
             date = Date.from(Instant.now());
+        }
+    }
+
+    private byte[] computeFashionFromWear() {
+        byte[] f = new byte[7];
+        for (int i = 0; i < 7; i++) {
+            f[i] = -1;
+        }
+        return f;
+    }
+
+    public void switchToDisciple() throws IOException {
+        if (detu == null || is_detu_training) return;
+        detu.checkDailyReset();
+        if (!detu.canTrain()) {
+            Service.send_notice_box(conn, "Hôm nay đệ tử đã hết thời gian luyện tập!");
+            return;
+        }
+
+        // Force unequip active mount for training mode
+        this.type_use_mount = -1;
+
+        // Save main character state in memory
+        main_clazz = this.clazz;
+        main_level = this.level;
+        main_exp = this.exp;
+        main_head = this.head;
+        main_eye = this.eye;
+        main_hair = this.hair;
+        main_point1 = this.point1;
+        main_point2 = this.point2;
+        main_point3 = this.point3;
+        main_point4 = this.point4;
+        main_tiemnang = this.tiemnang;
+        main_kynang = this.kynang;
+        main_pet_follow = this.pet_follow;
+        main_skill_point = new byte[this.skill_point.length];
+        System.arraycopy(this.skill_point, 0, main_skill_point, 0, this.skill_point.length);
+        main_skills = this.skills;
+        main_wear = new Item3[this.item.wear.length];
+        System.arraycopy(this.item.wear, 0, main_wear, 0, this.item.wear.length);
+        main_fashion = this.fashion;
+        main_name = this.name;
+
+        // Load disciple stats & equipment
+        this.clazz = detu.clazz;
+        this.level = detu.level;
+        this.exp = detu.exp;
+        this.head = detu.head;
+        this.eye = detu.eye;
+        this.hair = detu.hair;
+        this.point1 = detu.point1;
+        this.point2 = detu.point2;
+        this.point3 = detu.point3;
+        this.point4 = detu.point4;
+        this.tiemnang = detu.tiemnang;
+        this.kynang = detu.kynang;
+        System.arraycopy(detu.skill_point, 0, this.skill_point, 0, this.skill_point.length);
+        System.arraycopy(detu.wear, 0, this.item.wear, 0, this.item.wear.length);
+        this.type_use_mount = -1;
+        this.pet_follow = false;
+        this.name = detu.name;
+        this.fashion = Part_fashion.get_part(this);
+
+        load_skill();
+
+        is_detu_training = true;
+        detu.startTraining();
+
+        hp = body.get_max_hp();
+        mp = body.get_max_mp();
+
+        // Sync client
+        if (conn != null) {
+            Service.send_char_main_in4(this);
+            Service.send_skill(this);
+            Service.send_wear(this);
+            MapService.update_in4_2_other_inside(this.map, this);
+            // Clear tracking lists so client re-receives all entities
+            this.other_player_inside.clear();
+            this.other_mob_inside.clear();
+            this.other_mob_inside_update.clear();
+            Service.send_notice_box(conn, "Bắt đầu điều khiển Đệ Tử!\nThời gian còn lại: " + (detu.getRemainingTrainingTimeSeconds() / 60) + " phút.");
+        }
+    }
+
+    public void switchToMaster() throws IOException {
+        if (!is_detu_training || detu == null) return;
+
+        // Save disciple state back into detu
+        detu.level = this.level;
+        detu.exp = this.exp;
+        detu.head = this.head;
+        detu.eye = this.eye;
+        detu.hair = this.hair;
+        detu.point1 = this.point1;
+        detu.point2 = this.point2;
+        detu.point3 = this.point3;
+        detu.point4 = this.point4;
+        detu.tiemnang = this.tiemnang;
+        detu.kynang = this.kynang;
+        System.arraycopy(this.skill_point, 0, detu.skill_point, 0, this.skill_point.length);
+        System.arraycopy(this.item.wear, 0, detu.wear, 0, this.item.wear.length);
+
+        detu.stopTraining();
+        is_detu_training = false;
+
+        // Restore master state
+        this.clazz = main_clazz;
+        this.level = main_level;
+        this.exp = main_exp;
+        this.head = main_head;
+        this.eye = main_eye;
+        this.hair = main_hair;
+        this.point1 = main_point1;
+        this.point2 = main_point2;
+        this.point3 = main_point3;
+        this.point4 = main_point4;
+        this.tiemnang = main_tiemnang;
+        this.kynang = main_kynang;
+        this.pet_follow = main_pet_follow;
+        System.arraycopy(main_skill_point, 0, this.skill_point, 0, this.skill_point.length);
+        System.arraycopy(main_wear, 0, this.item.wear, 0, this.item.wear.length);
+        this.skills = main_skills;
+        this.fashion = main_fashion;
+        this.name = main_name;
+
+        hp = body.get_max_hp();
+        mp = body.get_max_mp();
+
+        // Sync client
+        if (conn != null) {
+            Service.send_char_main_in4(this);
+            Service.send_skill(this);
+            Service.send_wear(this);
+            MapService.update_in4_2_other_inside(this.map, this);
+            // Clear tracking lists so client re-receives all entities
+            this.other_player_inside.clear();
+            this.other_mob_inside.clear();
+            this.other_mob_inside_update.clear();
+            Service.send_notice_box(conn, "Đã trở về nhân vật chính!");
         }
     }
 
@@ -1139,6 +1362,13 @@ public class Player {
     }
 
     public void change_map(Player p, Vgo vgo) throws IOException {
+        if (p.is_detu_training) {
+            // Đệ tử không được vào: Đấu trường (36), Khu mỏ (2), Lôi đài (102), Chiến trường
+            if (vgo.id_map_go == 36 || vgo.id_map_go == 2 || vgo.id_map_go == 102 || Map.is_map_chien_truong((byte) vgo.id_map_go)) {
+                Service.send_notice_box(p.conn, "Đệ Tử không được tham gia khu vực này!");
+                return;
+            }
+        }
         if (map.map_id == 0) {
             Message m = new Message(55);
             m.writer().writeByte(1);
@@ -1188,6 +1418,9 @@ public class Player {
             } else {
                 if (mbuffer2 == null) {
                     for (Map mapp : mbuffer) {
+                        if (mapp.zone_id == 1 && Map.has_monster(mbuffer[0].map_id)) { // Bo qua Khu 2 khi random/tu dong vao map co quai
+                            continue;
+                        }
                         if (mapp.players.size() < mapp.maxplayer) {
                             mbuffer2 = mapp;
                             break;
@@ -1309,6 +1542,14 @@ public class Player {
     }
 
     public void change_zone(Session conn2, Message m2) throws IOException {
+        byte zone = m2.reader().readByte();
+        if (this.is_detu_training) {
+            // Đệ tử không được vào: Khu đi buôn (maxzone) hoặc Khu 4 chiếm mỏ
+            if (zone == this.map.maxzone || (zone == 4 && Map.is_map_chiem_mo(this.map, false))) {
+                Service.send_notice_box(conn, "Đệ Tử không được tham gia khu vực này!");
+                return;
+            }
+        }
         if (this.map.map_id == 0) {
             Message m = new Message(55);
             m.writer().writeByte(1);
@@ -1318,17 +1559,24 @@ public class Player {
             conn.addmsg(m);
             m.cleanup();
         }
-        byte zone = m2.reader().readByte();
         if (zone < this.map.maxzone || (conn.p.item.wear[11] != null && (conn.p.item.wear[11].id == 3599
                 || conn.p.item.wear[11].id == 3593 || conn.p.item.wear[11].id == 3596))) {
             if (zone != this.map.zone_id) {
-                Map map = Map.get_map_by_id(this.map.map_id)[zone];
-                if (map.players.size() >= map.maxplayer) {
+                Map targetMap = Map.get_map_by_id(this.map.map_id)[zone];
+                if (targetMap.players.size() >= targetMap.maxplayer) {
                     Service.send_notice_box(conn, "Có lỗi xảy ra khi chuyển map hoặc đã đầy, hãy thử lại sau");
                     return;
                 }
+                if (zone == 1 && Map.has_monster(this.map.map_id)) { // Vào Khu 2 của map có quái
+                    EffTemplate efKhu2 = get_eff(-127);
+                    if (efKhu2 == null || efKhu2.time <= System.currentTimeMillis()) {
+                        // Hiển thị popup xác nhận 50 ngọc
+                        Service.send_box_input_yesno(conn, 100, "Bạn có muốn dùng 50 Ngọc để vào Khu 2 trong 1 giờ không?");
+                        return;
+                    }
+                }
                 MapService.leave(this.map, this);
-                this.map = map;
+                this.map = targetMap;
                 MapService.enter(this.map, this);
             } else {
                 Service.send_notice_box(conn, "mày đang ở khu này rồi đấy!!");
@@ -1347,10 +1595,8 @@ public class Player {
                 return false;
             }
             coin_old += coin_exchange;
-            if (ps.executeUpdate(
-                    "UPDATE `account` SET `coin` = " + coin_old + " WHERE `user` = '" + conn.user + "'") == 1) {
-                connection.commit();
-            }
+            ps.executeUpdate(
+                    "UPDATE `account` SET `coin` = " + coin_old + " WHERE `user` = '" + conn.user + "'");
         } catch (SQLException e) {
             Service.send_notice_box(conn, "Đã xảy ra lỗi");
         }
@@ -1495,6 +1741,10 @@ public class Player {
                 b = 18;
                 break;
             }
+            case 27: { // danh hieu
+                b = 19;
+                break;
+            }
         }
         if (b == -1) {
             Service.send_notice_box(conn, "Có lỗi xảy ra, hãy thử lại");
@@ -1510,11 +1760,26 @@ public class Player {
             item.wear[b] = temp3;
             item.remove(3, index_bag, 1);
             if (buffer.id != 3593 && buffer.id != 3599 && buffer.id != 3596) {
-                item.add_item_bag3(buffer);
+                if (!item.add_item_bag3(buffer)) {
+                    Service.send_notice_box(conn, "Hành trang và rương đồ đã đầy! Không thể tháo vật phẩm ra túi đồ.");
+                }
             }
         }
         if (b == 11) {
             fashion = Part_fashion.get_part(this);
+        }
+        if (b == 19) {
+            if (item.wear[19] != null) {
+                short it_id = item.wear[19].id;
+                id_name = (short) (ItemTemplate3.item.get(it_id).getPart() + 41);
+                if (!((it_id >= 4720 && it_id <= 4727) || (it_id >= 4765 && it_id <= 4767))) {
+                    id_name = 78;
+                }
+                conn.p.update_id_name(it_id);
+            } else {
+                id_name = -1;
+                conn.p.update_id_name(-1);
+            }
         }
         item.char_inventory(4);
         item.char_inventory(7);
@@ -1678,6 +1943,10 @@ public class Player {
     }
 
     public void friend_process(Message m2) throws IOException {
+        if (this.is_detu_training) {
+            Service.send_notice_box(conn, "Trong trạng thái luyện Đệ Tử không thể sử dụng tính năng kết bạn!");
+            return;
+        }
         byte type = m2.reader().readByte();
         String name = m2.reader().readUTF();
         switch (type) {
@@ -1877,7 +2146,7 @@ public class Player {
         //
         Map[] map_enter = Map.get_map_by_id(map.map_id);
         int d = 0;
-        while ((d < (map_enter[d].maxzone - 1)) && map_enter[d].players.size() >= map_enter[d].maxplayer) {
+        while ((d < (map_enter[d].maxzone - 1)) && (d == 1 || map_enter[d].players.size() >= map_enter[d].maxplayer)) {
             d++;
         }
         map = map_enter[d];
@@ -1967,22 +2236,38 @@ public class Player {
                         ps.clearParameters();
                         Player p0 = map0.players.get(i1);
                         //
-                        ps.setInt(1, p0.level);
-                        ps.setLong(2, p0.exp);
+                        // When training disciple, save master's original stats to DB
+                        if (p0.is_detu_training && p0.detu != null) {
+                            p0.detu.level = p0.level;
+                            p0.detu.exp = p0.exp;
+                            p0.detu.head = p0.head;
+                            p0.detu.eye = p0.eye;
+                            p0.detu.hair = p0.hair;
+                            p0.detu.point1 = p0.point1;
+                            p0.detu.point2 = p0.point2;
+                            p0.detu.point3 = p0.point3;
+                            p0.detu.point4 = p0.point4;
+                            p0.detu.tiemnang = p0.tiemnang;
+                            p0.detu.kynang = p0.kynang;
+                            System.arraycopy(p0.skill_point, 0, p0.detu.skill_point, 0, p0.skill_point.length);
+                            System.arraycopy(p0.item.wear, 0, p0.detu.wear, 0, p0.item.wear.length);
+                        }
+                        ps.setInt(1, p0.is_detu_training ? p0.main_level : p0.level);
+                        ps.setLong(2, p0.is_detu_training ? p0.main_exp : p0.exp);
                         JSONArray jsar = new JSONArray();
                         jsar.add(p0.map.map_id);
                         jsar.add(p0.x);
                         jsar.add(p0.y);
                         ps.setNString(3, jsar.toJSONString());
                         jsar.clear();
-                        jsar.add(p0.head);
-                        jsar.add(p0.eye);
-                        jsar.add(p0.hair);
+                        jsar.add(p0.is_detu_training ? p0.main_head : p0.head);
+                        jsar.add(p0.is_detu_training ? p0.main_eye : p0.eye);
+                        jsar.add(p0.is_detu_training ? p0.main_hair : p0.hair);
                         ps.setNString(4, jsar.toJSONString());
                         jsar.clear();
                         for (int i = 0; i < p0.list_eff.size(); i++) {
                             EffTemplate temp = p0.list_eff.get(i);
-                            if (temp.id != -126 && temp.id != -125) {
+                            if (temp.id != -126 && temp.id != -125 && temp.id != -127) {
                                 continue;
                             }
                             JSONArray jsar21 = new JSONArray();
@@ -2014,8 +2299,9 @@ public class Player {
                         }
                         ps.setNString(6, jsar.toJSONString());
                         jsar.clear();
+                        byte[] sp_save = p0.is_detu_training ? p0.main_skill_point : p0.skill_point;
                         for (int i = 0; i < 21; i++) {
-                            jsar.add(p0.skill_point[i]);
+                            jsar.add(sp_save[i]);
                         }
                         ps.setNString(7, jsar.toJSONString());
                         jsar.clear();
@@ -2070,8 +2356,9 @@ public class Player {
                         ps.setNString(10, jsar.toJSONString());
                         jsar.clear();
                         //
-                        for (int i = 0; i < p0.item.wear.length - 1; i++) {
-                            Item3 temp = p0.item.wear[i];
+                        Item3[] wear_save = p0.is_detu_training ? p0.main_wear : p0.item.wear;
+                        for (int i = 0; i < wear_save.length - 1; i++) {
+                            Item3 temp = wear_save[i];
                             if (temp != null) {
                                 JSONArray jsar2 = new JSONArray();
                                 jsar2.add(temp.id);
@@ -2212,18 +2499,18 @@ public class Player {
                         //
                         ps.setLong(21, p0.vang);
                         ps.setInt(22, p0.kimcuong);
-                        ps.setInt(23, p0.tiemnang);
-                        ps.setShort(24, p0.kynang);
+                        ps.setInt(23, p0.is_detu_training ? p0.main_tiemnang : p0.tiemnang);
+                        ps.setShort(24, p0.is_detu_training ? p0.main_kynang : p0.kynang);
                         ps.setByte(25, p0.diemdanh);
                         ps.setByte(26, p0.chucphuc);
                         ps.setInt(27, p0.hieuchien);
                         ps.setInt(27, p0.chuyensinh);
                         ps.setByte(28, p0.type_exp);
                         ps.setNString(29, p0.date.toString());
-                        ps.setInt(30, p0.point1);
-                        ps.setInt(31, p0.point2);
-                        ps.setInt(32, p0.point3);
-                        ps.setInt(33, p0.point4);
+                        ps.setInt(30, p0.is_detu_training ? p0.main_point1 : p0.point1);
+                        ps.setInt(31, p0.is_detu_training ? p0.main_point2 : p0.point2);
+                        ps.setInt(32, p0.is_detu_training ? p0.main_point3 : p0.point3);
+                        ps.setInt(33, p0.is_detu_training ? p0.main_point4 : p0.point4);
                         ps.setInt(34, p0.id);
                         ps.setInt(27, p0.dropnlmd);
                         ps.addBatch();
@@ -2235,7 +2522,6 @@ public class Player {
             }
             // }
             ps.executeBatch();
-            connection.commit();
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -2270,70 +2556,52 @@ public class Player {
     public void process_eff_ngoc_kham(Item3 it, int index) throws IOException {
         for (int i = 0; i < it.op.size(); i++) {
             if (it.op.get(i).id == (58 + index)) {
-                // ngoc hon nguyen
-                if (it.op.get(i).getParam(0) >= 382 && it.op.get(i).getParam(0) <= 386) {
-                    conn.p.time_atk_ngoc_hon_nguyen++;
-                    if (conn.p.time_atk_ngoc_hon_nguyen >= ((387 - it.op.get(i).getParam(0)) * 5)) {
-                        conn.p.time_atk_ngoc_hon_nguyen = 0;
-                        EffTemplate eff = conn.p.get_eff(32000);
-                        if (eff == null) {
-                            conn.p.add_eff(32000, ((387 - it.op.get(i).getParam(0)) * 5), 3000);
-                            // } else {
-                            // eff.param = Math.min(((387 - it.op.get(i).getParam(0)) * 5), eff.param);
+                int gemId = it.op.get(i).getParam(0);
+                // ngoc hon nguyen: 382-386
+                if (gemId >= 382 && gemId <= 386) {
+                    hit_count_ngoc_hon_nguyen++;
+                    int requiredHits = (387 - gemId) * 5;
+                    if (hit_count_ngoc_hon_nguyen >= requiredHits) {
+                        hit_count_ngoc_hon_nguyen = 0;
+                        if (get_eff(-210) == null) {
+                            // hy sinh 50% hp, x2 dame 3s
+                            long max_hp = body.get_max_hp();
+                            long sacrifice = max_hp / 2;
+                            hp -= sacrifice;
+                            if (hp < 1) hp = 1;
+                            add_eff(-210, 200, 3000);
                         }
                     }
                 }
-                // ngoc phong ma
-                switch (it.op.get(i).getParam(0)) {
-                    case 397: {
-                        if (15 > Util.random(1000) && hp < ((body.get_max_hp() / 10) * 2)) {
-                            EffTemplate eff = conn.p.get_eff(32000);
-                            if (eff == null) {
-                                conn.p.add_eff(32001, 1, 5000);
-                            }
-                            show_eff_p(20, 5000);
-                        }
-                        break;
+                // ngoc phong ma: 397-401
+                if (gemId >= 397 && gemId <= 401) {
+                    int level = gemId - 396;
+                    int chance = 5 + (level * 5);
+                    int hpThresholdPercent = 10 + (level * 10);
+                    long max_hp = body.get_max_hp();
+                    if (max_hp > 0 && hp < (max_hp * hpThresholdPercent) / 100
+                            && chance > Util.random(100) && get_eff(-212) == null) {
+                        add_eff(-212, level, 3000);
                     }
-                    case 398: {
-                        if (20 > Util.random(1000) && hp < ((body.get_max_hp() / 10) * 3)) {
-                            EffTemplate eff = conn.p.get_eff(32000);
-                            if (eff == null) {
-                                conn.p.add_eff(32001, 2, 5000);
-                            }
-                            show_eff_p(20, 5000);
+                }
+                // ngoc khai hoan: 402-406 (hit bi danh 25 lan → khang hieu ung 3s)
+                if (gemId >= 402 && gemId <= 406) {
+                    int level = gemId - 401;
+                    hit_count_ngoc_khai_hoan++;
+                    int requiredHits = Math.max(10, 30 - (level * 4));
+                    if (hit_count_ngoc_khai_hoan >= requiredHits) {
+                        hit_count_ngoc_khai_hoan = 0;
+                        if (get_eff(-211) == null) {
+                            add_eff(-211, 20, 3000);
                         }
-                        break;
                     }
-                    case 399: {
-                        if (25 > Util.random(1000) && hp < ((body.get_max_hp() / 10) * 4)) {
-                            EffTemplate eff = conn.p.get_eff(32000);
-                            if (eff == null) {
-                                conn.p.add_eff(32001, 5, 5000);
-                            }
-                            show_eff_p(20, 5000);
-                        }
-                        break;
-                    }
-                    case 400: {
-                        if (35 > Util.random(1000) && hp < ((body.get_max_hp() / 10) * 5)) {
-                            EffTemplate eff = conn.p.get_eff(32000);
-                            if (eff == null) {
-                                conn.p.add_eff(32001, 7, 5000);
-                            }
-                            show_eff_p(20, 5000);
-                        }
-                        break;
-                    }
-                    case 401: {
-                        if (45 > Util.random(1000) && hp < ((body.get_max_hp() / 10) * 7)) {
-                            EffTemplate eff = conn.p.get_eff(32000);
-                            if (eff == null) {
-                                conn.p.add_eff(32001, 10, 5000);
-                            }
-                            show_eff_p(20, 5000);
-                        }
-                        break;
+                }
+                // ngoc luc bao: 407-411 (chuyen 10% st thanh hp)
+                if (gemId >= 407 && gemId <= 411) {
+                    int level = gemId - 406;
+                    int chance = 100 + (level * 100);
+                    if (chance > Util.random(1000) && get_eff(-213) == null) {
+                        add_eff(-213, level, 3000);
                     }
                 }
             }
@@ -2346,8 +2614,8 @@ public class Player {
         m.writer().writeShort(0);
         m.writer().writeByte(0);
         m.writer().writeByte(0);
-        m.writer().writeByte(id_eff);
-        m.writer().writeShort(this.id);
+        m.writer().writeByte((byte) this.id);
+        m.writer().writeShort(id_eff);
         m.writer().writeByte(0);
         m.writer().writeByte(0);
         m.writer().writeInt(time);
@@ -2365,9 +2633,7 @@ public class Player {
                 return;
             }
             coin_old += coin_exchange;
-            if (ps.executeUpdate("UPDATE `account` SET `coin` = " + coin_old + " WHERE `user` = '" + name + "'") == 1) {
-                connection.commit();
-            }
+            ps.executeUpdate("UPDATE `account` SET `coin` = " + coin_old + " WHERE `user` = '" + name + "'");
         } catch (SQLException e) {
         }
     }
@@ -2413,7 +2679,6 @@ public void update_chucphuc(int value) {
         ps.setInt(1, value);
         ps.setInt(2, this.id);
         ps.executeUpdate();
-        conn.commit();
     } catch (SQLException e) {
         e.printStackTrace();
     }
@@ -2424,9 +2689,7 @@ public void update_chucphuc(int value) {
          try ( Connection connection = SQL.gI().getConnection();
                  Statement ps = connection.createStatement()) {
             ps.execute("UPDATE `player` SET `id_name` = "+i+" WHERE `id` = "+ this.id+";");
-            connection.commit();
         } catch (SQLException e) {
         }
-         this.id_name = (short) i;
     }
 }

@@ -36,7 +36,13 @@ public class Option {
 		if (tier > 15) {
 			tier = 15;
 		}
+		if (this.id == 72 || this.id == 73 || this.id == 74 || this.id == 75) {
+			return parbuffer;
+		}
 		if ((this.id >= 0 && this.id <= 6) || this.id == 14 || this.id == 40) {
+			if (this.id == 5 || this.id == 6) {
+				return parbuffer; // Special Damage is not scaled by equipment tier
+			}
 			parbuffer = (parafterupdate[tier] * this.param) / 100;
 			return parbuffer;
 		}

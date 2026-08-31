@@ -10,6 +10,11 @@ import template.Option_pet;
 
 public class Pet {
 
+    public static final byte TYPE_DAI_BANG = 3;
+    public static final short ID_DAI_BANG = 3269;
+    public static final int EAGLE_GOLD_MIN = 100;
+    public static final int EAGLE_GOLD_MAX = 3000;
+
     public static String[] name_template = new String[]{"Cú", "Dơi", "Sói", "Đại Bàng", "Khỉ", "Rồng lửa", "Thỏ",
         "Phượng hoàng băng", "Zabivaka", "Bóng ma", "Dê con", "Yêu tinh", "Thiên thần", "Sao la"};
     public static byte[] type_template = new byte[]{8, 13, 10, 11, 11, 11, 12, 12, 12, 9, 7, 7, 7, 6, 5, 5, 5, 4, 4, 4,
@@ -277,6 +282,10 @@ public class Pet {
             return true;
         }
         return false;
+    }
+
+    public boolean isEagle() {
+        return this.type == TYPE_DAI_BANG;
     }
 
     public void update_grown(long t) {

@@ -87,6 +87,10 @@ public class MessageHandler {
                 break;
             }
             case 69: {
+                if (conn.p.is_detu_training) {
+                    Service.send_notice_box(conn, "Trong trạng thái luyện Đệ Tử không thể tham gia bang hội!");
+                    return;
+                }
                 byte type = m.reader().readByte();
                 if (type == 11) {
                     Player p0 = Map.get_player_by_name(m.reader().readUTF());
@@ -265,6 +269,10 @@ public class MessageHandler {
                 break;
             }
             case 42: {
+                if (conn.p.is_detu_training) {
+                    Service.send_notice_box(conn, "Trong trạng thái luyện Đệ Tử không thể đổi cờ / PK!");
+                    return;
+                }
                 MapService.change_flag(conn.p.map, conn.p, m.reader().readByte());
                 break;
             }
@@ -303,6 +311,31 @@ public class MessageHandler {
             }
             case 12: {
                 conn.p.is_changemap = false;
+
+                // Spawn summoned disciple when client has finished loading map (eg.g == true)
+                if (conn.p.detu != null && conn.p.detu.state == Disciple.STATE_SUMMONED) {
+                    if (!Disciple.isMapRestrictedForDisciple(conn.p.map)) {
+                        conn.p.detu.summon_map_id = conn.p.map.map_id;
+                        conn.p.detu.summon_zone_id = conn.p.map.zone_id;
+                        conn.p.detu.summon_x = (short) (conn.p.x + Util.random(-25, 25));
+                        conn.p.detu.summon_y = (short) (conn.p.y + Util.random(-15, 15));
+                        conn.p.detu.target_mob = null;
+                        conn.p.detu.target_mo = null;
+
+                        Message mDetu4 = new Message(4);
+                        mDetu4.writer().writeByte(0);
+                        mDetu4.writer().writeShort(0);
+                        mDetu4.writer().writeShort(conn.p.detu.id);
+                        mDetu4.writer().writeShort(conn.p.detu.summon_x);
+                        mDetu4.writer().writeShort(conn.p.detu.summon_y);
+                        mDetu4.writer().writeByte(-1);
+                        conn.addmsg(mDetu4);
+                        mDetu4.cleanup();
+
+                        conn.p.detu.send_in4(conn.p.map, conn.p);
+                    }
+                }
+
                 if (conn.p.map.equals(Manager.gI().bossTG.map)) {
                     Message m3 = new Message(4);
                     m3.writer().writeByte(0);
@@ -413,9 +446,9 @@ public class MessageHandler {
                 break;
             }
             case 5: {
-                int id = Short.toUnsignedInt(m.reader().readShort());
+                int id = m.reader().readShort();
                 Player p0 = null;
-                if (id == Short.toUnsignedInt((short) -1)) { // boss tg
+                if (id == -1) { // boss tg
                     Manager.gI().bossTG.send_in4(conn.p);
                 } else {
                     for (int i = 0; i < conn.p.map.players.size(); i++) {
@@ -427,25 +460,41 @@ public class MessageHandler {
                     }
                     if (p0 != null) {
                         MapService.send_in4_other_char(conn.p.map, conn.p, p0);
-                    } else if (Map.is_map_chiem_mo(conn.p.map, true)) {
-                        NhanBan temp = null;
-                        for (int i = 0; i < Manager.gI().list_nhanban.size(); i++) {
-                            NhanBan temp2 = Manager.gI().list_nhanban.get(i);
-                            if (temp2.id_p == id) {
-                                temp = temp2;
+                    } else {
+                        // Check if it's a disciple
+                        boolean foundDisciple = false;
+                        for (int i = 0; i < conn.p.map.players.size(); i++) {
+                            Player p01 = conn.p.map.players.get(i);
+                            if (p01.detu != null && p01.detu.id == id) {
+                                System.out.println("[DISCIPLE] MSG5 LOOKUP OK id=" + id + " master=" + p01.name);
+                                p01.detu.send_in4(conn.p.map, conn.p);
+                                foundDisciple = true;
                                 break;
                             }
                         }
-                        if (temp != null) {
-                            temp.send_in4(conn.p);
+                        if (!foundDisciple) {
+                            if (Map.is_map_chiem_mo(conn.p.map, true)) {
+                                NhanBan temp = null;
+                                for (int i = 0; i < Manager.gI().list_nhanban.size(); i++) {
+                                    NhanBan temp2 = Manager.gI().list_nhanban.get(i);
+                                    if (temp2.id_p == id) {
+                                        temp = temp2;
+                                        break;
+                                    }
+                                }
+                                if (temp != null) {
+                                    temp.send_in4(conn.p);
+                                }
+                            } else if (Map.is_map_chien_truong(conn.p.map.map_id)) {
+                                ChienTruong.gI().get_ai(conn.p, id);
+                            } else {
+                                System.out.println("[DISCIPLE] MSG5 LOOKUP FAIL id=" + id + " SENDING REMOVE(8) - THIS SHOULD NOT HAPPEN FOR DISCIPLE!");
+                                Message m3 = new Message(8);
+                                m3.writer().writeShort(id);
+                                conn.addmsg(m3);
+                                m3.cleanup();
+                            }
                         }
-                    } else if (Map.is_map_chien_truong(conn.p.map.map_id)) {
-                        ChienTruong.gI().get_ai(conn.p, id);
-                    } else {
-                        Message m3 = new Message(8);
-                        m3.writer().writeShort(id);
-                        conn.addmsg(m3);
-                        m3.cleanup();
                     }
                 }
                 break;
@@ -505,7 +554,12 @@ public class MessageHandler {
             }
             case 1: {
                 if (!conn.get_in4) {
+                    try {
                     conn.getclientin4(m);
+                    } catch (Exception e) {
+                        System.out.println("GETCLIENTIN4 ERROR: " + e.getMessage());
+                        e.printStackTrace();
+                    }
                 }
                 break;
             }
@@ -528,15 +582,11 @@ public class MessageHandler {
                 m.reader().readByte(); // type login
                 int id_player_login = m.reader().readInt();
                 Player p0 = new Player(conn, id_player_login);
+                try {
                 if (p0.setup()) {
                     if (!Session.players.containsKey(conn.user)) {
                         Session.players.put(conn.user, conn);
                     } else {
-//                        for (int i = Session.client_entrys.size() - 1; i >= 0; i--) {
-//                            if (Session.client_entrys.get(i).user != null && Session.client_entrys.get(i).user.equals(conn.user)) {
-//                                Session.client_entrys.get(i).close();
-//                            }
-//                        }
                         Session.players.get(conn.user).close();
                         Session.players.remove(conn.user);
                         conn.close();
@@ -546,6 +596,12 @@ public class MessageHandler {
                     p0.set_in4();
                     conn.p = p0;
                     MessageHandler.dataloginmap(conn);
+                } else {
+                    System.out.println("setup FAILED for player id=" + id_player_login);
+                }
+                } catch (Exception e) {
+                    System.out.println("LOGIN EXCEPTION player id=" + id_player_login);
+                    e.printStackTrace();
                 }
             }
         }

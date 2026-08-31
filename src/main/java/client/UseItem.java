@@ -14,6 +14,7 @@ import map.LeaveItemMap;
 import map.MapService;
 import map.Vgo;
 import map.Map;
+import map.Mob_in_map;
 import template.EffTemplate;
 import template.Item3;
 import template.Item47;
@@ -83,6 +84,123 @@ public class UseItem {
 				}
 				break;
 			}
+            case 219: { // Bua Goi De Tu
+                if (conn.p.detu == null) {
+                    Service.send_notice_box(conn, "Bạn chưa có Đệ Tử!");
+                    return;
+                }
+                if (conn.p.is_detu_training) {
+                    Service.send_notice_box(conn, "Đang trong trạng thái luyện đệ tử, không thể gọi đệ tử!");
+                    return;
+                }
+                if (!conn.p.detu.canSummon()) {
+                    long sec = conn.p.detu.getSummonCooldownRemainingSeconds();
+                    Service.send_notice_box(conn, "Đệ tử bị mất! Cần chờ " + (sec / 60) + " phút " + (sec % 60) + " giây mới được gọi lại!");
+                    return;
+                }
+                if (conn.p.detu.state == Disciple.STATE_SUMMONED) {
+                    Service.send_notice_box(conn, "Đệ tử đã được gọi ra rồi!");
+                    return;
+                }
+                // Check if map is restricted
+                if (Disciple.isMapRestrictedForDisciple(conn.p.map)) {
+                    Service.send_notice_box(conn, "Không thể gọi đệ tử trong khu vực này!");
+                    return;
+                }
+                conn.p.item.remove(4, id, 1);
+                conn.p.detu.state = Disciple.STATE_SUMMONED;
+                conn.p.detu.summon_map_id = conn.p.map.map_id;
+                conn.p.detu.summon_zone_id = conn.p.map.zone_id;
+                conn.p.detu.summon_x = (short) (conn.p.x + Util.random(-30, 30));
+                conn.p.detu.summon_y = conn.p.y;
+                conn.p.detu.target_mob = null;
+
+                System.out.println("[DISCIPLE] SUMMON id=" + conn.p.detu.id + " master=" + conn.p.name + " master_id=" + conn.p.id + " map=" + conn.p.map.map_id + ":" + conn.p.map.zone_id + " pos=" + conn.p.detu.summon_x + "," + conn.p.detu.summon_y + " hp=" + conn.p.detu.hp + " max_hp=" + conn.p.detu.get_max_hp() + " players=" + conn.p.map.players.size());
+                // Spawn: send Message(4) position first, then Message(5) info
+                for (int i = 0; i < conn.p.map.players.size(); i++) {
+                    Player p0 = conn.p.map.players.get(i);
+                    if (p0 != null && p0.conn != null) {
+                        // Step 1: send position via Message(4)
+                        Message mSpawn = new Message(4);
+                        mSpawn.writer().writeByte(0);
+                        mSpawn.writer().writeShort(0);
+                        mSpawn.writer().writeShort(conn.p.detu.id);
+                        mSpawn.writer().writeShort(conn.p.detu.summon_x);
+                        mSpawn.writer().writeShort(conn.p.detu.summon_y);
+                        mSpawn.writer().writeByte(-1);
+                        p0.conn.addmsg(mSpawn);
+                        mSpawn.cleanup();
+                        // Step 2: send full info via Message(5)
+                        conn.p.detu.send_in4(conn.p.map, p0);
+                    }
+                }
+
+                Service.send_notice_box(conn, "Đã gọi Đệ Tử thành công! Đệ Tử sẽ đi theo và hỗ trợ Sư Phụ.");
+                break;
+            }
+            case 220: { // Keo Ho Lo
+                if (conn.p.detu != null) {
+                    Service.send_notice_box(conn, "Bạn đã có Đệ Tử rồi, không thể dụ thêm đứa bé!");
+                    return;
+                }
+                if (conn.p.id_dua_be != -1) {
+                    Service.send_notice_box(conn, "Bạn đang dắt 1 Đứa Bé rồi, hãy đưa về gặp Mr Master!");
+                    return;
+                }
+                // Check if player is near any Dua Be mob in map
+                boolean foundNearChild = false;
+                short targetMobIndex = -1;
+                for (Mob_in_map mob : conn.p.map.mobs) {
+                    if (mob.template.mob_id == 175 && !mob.isdie && Math.abs(mob.x - conn.p.x) < 150 && Math.abs(mob.y - conn.p.y) < 150) {
+                        foundNearChild = true;
+                        targetMobIndex = (short) mob.index;
+                        break;
+                    }
+                }
+                // Or check near player location in normal monster maps
+                if (!foundNearChild) {
+                    // Allow using near player in suitable maps
+                    if (Map.has_monster(conn.p.map.map_id) && !Map.is_map_cant_save_site(conn.p.map.map_id)) {
+                        foundNearChild = true;
+                        targetMobIndex = (short) Manager.gI().get_index_mob_new();
+                    }
+                }
+
+                if (foundNearChild) {
+                    conn.p.item.remove(4, id, 1);
+                    conn.p.id_dua_be = targetMobIndex;
+                    // Send spawn/follow packet for child
+                    Message m22 = new Message(4);
+                    m22.writer().writeByte(1);
+                    m22.writer().writeShort(175);
+                    m22.writer().writeShort(conn.p.id_dua_be);
+                    m22.writer().writeShort(conn.p.x);
+                    m22.writer().writeShort(conn.p.y);
+                    m22.writer().writeByte(-1);
+                    MapService.send_msg_player_inside(conn.p.map, conn.p, m22, true);
+                    m22.cleanup();
+
+                    Service.send_notice_box(conn, "Bạn đã cho Đứa Bé kẹo hồ lô thành công!\nHãy dắt Đứa Bé về gặp NPC Mr Master để nhận làm Đệ Tử!");
+                } else {
+                    Service.send_notice_box(conn, "Không tìm thấy Đứa Bé nào ở gần để cho kẹo hồ lô!");
+                }
+                break;
+            }
+            case 227: { // Ve Luyen De Tu
+                if (conn.p.detu == null) {
+                    Service.send_notice_box(conn, "Bạn chưa có Đệ Tử!");
+                    return;
+                }
+                conn.p.detu.checkDailyReset();
+                if (conn.p.detu.training_ticket_used_today) {
+                    Service.send_notice_box(conn, "Hôm nay đệ tử đã sử dụng 1 vé luyện rồi, không thể dùng thêm!");
+                    return;
+                }
+                conn.p.item.remove(4, id, 1);
+                conn.p.detu.training_ticket_used_today = true;
+                Service.send_notice_box(conn, "Sử dụng Vé luyện đệ tử thành công!\nĐệ tử được cộng thêm 3 tiếng (180 phút) luyện hôm nay.");
+                break;
+            }
             case 84: {
                 if (conn.p.map.zone_id != conn.p.map.maxzone) {
                     Service.send_notice_box(conn, "Chỉ dùng được trong khu đi buôn");
@@ -139,6 +257,13 @@ public class UseItem {
                     param += ((param * 5 * conn.p.body.get_skill_point(10)) / 100);
                     Service.usepotion(conn.p, 1, param);
                 }
+                break;
+            }
+            case 215:
+            case 216:
+            case 217:
+            case 218: {
+                Service.send_notice_box(conn, "Đệ Tử chưa mở hệ thống học kỹ năng mới!");
                 break;
             }
             case 6: {
@@ -266,6 +391,42 @@ public class UseItem {
                 Vgo vgo = null;
                 vgo = new Vgo();
                 vgo.id_map_go = 91;
+                vgo.x_new = 456;
+                vgo.y_new = 360;
+                conn.p.change_map(conn.p, vgo);
+                conn.p.item.remove(4, id, 1);
+                break;
+            }
+            case 321: {
+                Vgo vgo = new Vgo();
+                vgo.id_map_go = 103;
+                vgo.x_new = 456;
+                vgo.y_new = 360;
+                conn.p.change_map(conn.p, vgo);
+                conn.p.item.remove(4, id, 1);
+                break;
+            }
+            case 322: {
+                Vgo vgo = new Vgo();
+                vgo.id_map_go = 104;
+                vgo.x_new = 456;
+                vgo.y_new = 360;
+                conn.p.change_map(conn.p, vgo);
+                conn.p.item.remove(4, id, 1);
+                break;
+            }
+            case 323: {
+                Vgo vgo = new Vgo();
+                vgo.id_map_go = 105;
+                vgo.x_new = 456;
+                vgo.y_new = 360;
+                conn.p.change_map(conn.p, vgo);
+                conn.p.item.remove(4, id, 1);
+                break;
+            }
+            case 324: {
+                Vgo vgo = new Vgo();
+                vgo.id_map_go = 106;
                 vgo.x_new = 456;
                 vgo.y_new = 360;
                 conn.p.change_map(conn.p, vgo);
@@ -513,11 +674,7 @@ public class UseItem {
                 break;
             }
             case 261: {
-                if (conn.p.chuyensinh > 0 ) {
-                Service.send_notice_nobox_white(conn, "không thẻ sử dụng khi đã chuyển sinh");
-                        return;
-                }
-                if (conn.p.level < 10 || conn.p.level == 20 || conn.p.level == 30 || conn.p.level == 40) {
+                if (conn.p.level <= 1) {
                     Service.send_notice_nobox_white(conn, "level không phù hợp");
                     return;
                 }
@@ -959,7 +1116,7 @@ public class UseItem {
                 Service.send_notice_nobox_white(conn, "Class không hợp lệ");
                 return;
             }
-            if (temp3.level > conn.p.level) {
+            if (temp3.level > conn.p.level && temp3.type != 27) {
                 Service.send_notice_nobox_white(conn, "Level quá thấp");
                 return;
             }
@@ -994,6 +1151,7 @@ public class UseItem {
                     case 24:
                     case 25:
                     case 26:
+                    case 27: // danh hieu
                     case 11: { // weapon
                         conn.p.player_wear(conn, temp3, id, index);
                         break;

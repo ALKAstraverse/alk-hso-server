@@ -17,6 +17,7 @@ import template.EffTemplate;
 import template.Mob;
 import template.Mob_Dungeon;
 import template.Option_pet;
+import template.SpecialDamage;
 
 public class Dungeon {
 
@@ -214,7 +215,7 @@ public class Dungeon {
                     p0.y = 354;
                     Map[] map_enter = Map.get_map_by_id(1);
                     int d = 0;
-                    while ((d < (map_enter[d].maxzone - 1)) && map_enter[d].players.size() >= map_enter[d].maxplayer) {
+                    while ((d < (map_enter[d].maxzone - 1)) && (d == 1 || map_enter[d].players.size() >= map_enter[d].maxplayer)) {
                         d++;
                     }
                     p0.map = map_enter[d];
@@ -584,7 +585,12 @@ public class Dungeon {
         if (dame < 0) {
             dame = 0;
         }
+        SpecialDamage spDame = SpecialDamage.calculate(p);
+
         mob.hp -= dame;
+        if (spDame.damage > 0) {
+            mob.hp -= spDame.damage;
+        }
         // if mob die
         if (mob.hp < 0) {
             mob.hp = 0;
@@ -636,10 +642,11 @@ public class Dungeon {
         }
         m.writer().writeInt((int) Math.min(p.hp,Integer.MAX_VALUE));
         m.writer().writeInt((int) Math.min(p.mp,Integer.MAX_VALUE));
-        m.writer().writeByte(11); // 1: green, 5: small white 9: big white, 10: st dien, 11: st bang
-        m.writer().writeInt(0); // dame plus
+        m.writer().writeByte(spDame.damage > 0 ? (spDame.type == SpecialDamage.TYPE_LIGHT ? 10 : 11) : 11); // 10: yellow (light), 11: violet (dark)
+        m.writer().writeInt(spDame.damage > 0 ? spDame.damage : 0); // dame plus (Special Damage)
         MapService.send_msg_player_inside(map, p, m, true);
         m.cleanup();
+
         // exp
         int expup = 0;
         expup = dame; // tinh exp
@@ -694,6 +701,9 @@ public class Dungeon {
                     m.writer().writeInt((int) Math.min(p.body.get_max_hp(),Integer.MAX_VALUE));
                     p.conn.addmsg(m);
                     m.cleanup();
+                    if (my_pet.isEagle()) {
+                        LeaveItemMap.leave_vang_eagle(map, mob.index_mob, p);
+                    }
                 }
             }
         }

@@ -77,7 +77,6 @@ public class Wedding {
 			}
 			js2.add(js22);
 			st.execute(String.format(query, "'" + js.toJSONString() + "'", "'" + js2.toJSONString() + "'"));
-                        connection.commit();
 		} catch (SQLException e) {
 			e.printStackTrace();
 			p.conn.close();
@@ -118,7 +117,6 @@ public class Wedding {
 			js.add(temp.name_1);
 			js.add(temp.name_2);
 			st.execute(String.format(query, js.toString()));
-                        conn.commit();
 		} catch (SQLException e) {
 			e.printStackTrace();
 		}

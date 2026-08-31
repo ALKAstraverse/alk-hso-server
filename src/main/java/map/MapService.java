@@ -29,6 +29,7 @@ import template.Option;
 import template.Option_pet;
 import template.Pet_di_buon;
 import template.Pet_di_buon_manager;
+import template.SpecialDamage;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -43,7 +44,7 @@ public class MapService {
         //
         try {
             // if (map.map_id != 48) {
-            if (map.zone_id == map.maxzone) {
+            if (map.zone_id == map.maxzone || (map.zone_id == 1 && Map.has_monster(map.map_id))) {
                 MapService.change_flag(map, p, -1);
             }
             map.send_map_data(p);
@@ -56,6 +57,39 @@ public class MapService {
             // }
             if (p.party != null) {
                 p.party.sendin4();
+            }
+
+            // Spawn summoned disciple into new map if active
+            if (p.detu != null && p.detu.state == client.Disciple.STATE_SUMMONED) {
+                if (client.Disciple.isMapRestrictedForDisciple(map)) {
+                    System.out.println("[DISCIPLE] ENTER RESTRICTED_MAP map=" + map.map_id + " calling onSummonLost");
+                    p.detu.onSummonLost();
+                    Service.send_notice_box(p.conn, "Đệ Tử bị mất! Cần 10 phút sau mới có thể gọi lại.");
+                } else {
+                    p.detu.summon_map_id = map.map_id;
+                    p.detu.summon_zone_id = map.zone_id;
+                    p.detu.summon_x = p.x;
+                    p.detu.summon_y = p.y;
+                    p.detu.target_mob = null;
+                    System.out.println("[DISCIPLE] ENTER_MAP_SPAWN id=" + p.detu.id + " master=" + p.name + " map=" + map.map_id + ":" + map.zone_id + " pos=" + p.detu.summon_x + "," + p.detu.summon_y + " players=" + map.players.size());
+                    for (int i = 0; i < map.players.size(); i++) {
+                        Player p0 = map.players.get(i);
+                        if (p0 != null && p0.conn != null) {
+                            // Send disciple position via Message(4)
+                            Message mDetu4 = new Message(4);
+                            mDetu4.writer().writeByte(0);
+                            mDetu4.writer().writeShort(0);
+                            mDetu4.writer().writeShort(p.detu.id);
+                            mDetu4.writer().writeShort(p.detu.summon_x);
+                            mDetu4.writer().writeShort(p.detu.summon_y);
+                            mDetu4.writer().writeByte(-1);
+                            p0.conn.addmsg(mDetu4);
+                            mDetu4.cleanup();
+                            // Send disciple full info via Message(5)
+                            p.detu.send_in4(map, p0);
+                        }
+                    }
+                }
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -103,6 +137,19 @@ public class MapService {
 					}
 					m2.cleanup();
 				}
+                // When player changes map / leaves, send remove message for child or summoned disciple
+                if (p.id_dua_be != -1) {
+                    Message m2 = new Message(8);
+                    m2.writer().writeShort(p.id_dua_be);
+                    for (int i = 0; i < map.players.size(); i++) {
+                        map.players.get(i).conn.addmsg(m2);
+                    }
+                    m2.cleanup();
+                }
+                if (p.detu != null && p.detu.state == client.Disciple.STATE_SUMMONED) {
+                    System.out.println("[DISCIPLE] LEAVE_MAP_DIE id=" + p.detu.id + " master=" + p.name + " map=" + map.map_id + ":" + map.zone_id);
+                    p.detu.send_die(map);
+                }
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -208,6 +255,9 @@ public class MapService {
             //
             m.cleanup();
         }
+        if (p.detu != null && p.detu.state == client.Disciple.STATE_SUMMONED) {
+            p.detu.onMasterMove(map);
+        }
         if (p.pet_di_buon != null && p.pet_di_buon.id_map == p.map.map_id && p.map.zone_id == p.map.maxzone) {
             if (p.pet_di_buon.time_move < System.currentTimeMillis()) {
                 p.pet_di_buon.time_move = System.currentTimeMillis() + 1000L;
@@ -277,9 +327,22 @@ public class MapService {
 			send_msg_player_inside(map, p, m4, true);
 			m4.cleanup();
 		}
+        // Dua Be follow master
+        if (!changeee && p.id_dua_be != -1) {
+            Message m4 = new Message(4);
+            m4.writer().writeByte(1);
+            m4.writer().writeShort(175); // Dua Be template
+            m4.writer().writeShort(p.id_dua_be);
+            m4.writer().writeShort(p.x);
+            m4.writer().writeShort(p.y);
+            m4.writer().writeByte(-1);
+            send_msg_player_inside(map, p, m4, true);
+            m4.cleanup();
+        }
     }
 
     private static void update_inside_player(Map map, Message m, Player p) throws IOException {
+        System.out.println("[VISIBILITY] UPDATE_INSIDE player=" + p.name + " pos=" + p.x + "," + p.y + " map=" + map.map_id + ":" + map.zone_id + " mobs=" + map.mobs.length + " players=" + map.players.size());
         Message m4 = new Message(4);
         for (Mob_in_map temp : map.mobs) {
             if (temp.isdie) {
@@ -322,7 +385,21 @@ public class MapService {
             if (p0.id == p.id) {
                 continue;
             }
-            if ((Math.abs(p0.x - p.x) < 200 && Math.abs(p0.y - p.y) < 200) || Map.is_map__load_board_player(map.map_id)) {
+            int distX = Math.abs(p0.x - p.x);
+            int distY = Math.abs(p0.y - p.y);
+            boolean inRange = (distX < 200 && distY < 200) || Map.is_map__load_board_player(map.map_id);
+            boolean wasInside = p.other_player_inside.containsKey(p0.id);
+            if (inRange) {
+                if (!wasInside) {
+                    System.out.println("[VISIBILITY] PLAYER_ENTER view player=" + p.name + " sees=" + p0.name + " dist=" + distX + "," + distY);
+                    if (p0.detu != null && p0.detu.state == client.Disciple.STATE_SUMMONED) {
+                        double detuDist = Math.sqrt(Math.pow(p0.detu.summon_x - p.x, 2) + Math.pow(p0.detu.summon_y - p.y, 2));
+                        System.out.println("[VISIBILITY] DISCIPLE_IN_VIEW master=" + p0.name + " disciple_id=" + p0.detu.id + " detu_pos=" + p0.detu.summon_x + "," + p0.detu.summon_y + " dist_to_me=" + (int)detuDist);
+                    }
+                    if (p.detu != null && p.detu.state == client.Disciple.STATE_SUMMONED) {
+                        System.out.println("[VISIBILITY] MY_DISCIPLE_SEEN other=" + p0.name + " disciple_id=" + p.detu.id + " detu_pos=" + p.detu.summon_x + "," + p.detu.summon_y);
+                    }
+                }
                 if (!p.other_player_inside.containsKey(p0.id)) {
                     p.other_player_inside.put(p0.id, true);
                 }
@@ -336,8 +413,41 @@ public class MapService {
                     m4.writer().writeByte(-1);
                     //
                     p.other_player_inside.replace(p0.id, true, false);
+
+                    // Send summoned disciple info if other player has one
+                    if (p0.detu != null && p0.detu.state == client.Disciple.STATE_SUMMONED) {
+                        System.out.println("[VISIBILITY] SPAWN_DISCIPLE to=" + p.name + " master=" + p0.name + " disciple_id=" + p0.detu.id + " pos=" + p0.detu.summon_x + "," + p0.detu.summon_y + " hp=" + p0.detu.hp + " maxhp=" + p0.detu.get_max_hp());
+                        // Send disciple position via Message(4)
+                        Message mDetu4 = new Message(4);
+                        mDetu4.writer().writeByte(0);
+                        mDetu4.writer().writeShort(0);
+                        mDetu4.writer().writeShort(p0.detu.id);
+                        mDetu4.writer().writeShort(p0.detu.summon_x);
+                        mDetu4.writer().writeShort(p0.detu.summon_y);
+                        mDetu4.writer().writeByte(-1);
+                        p.conn.addmsg(mDetu4);
+                        mDetu4.cleanup();
+                        // Send disciple full info via Message(5)
+                        p0.detu.send_in4(map, p);
+                    }
+                    // Send this player's summoned disciple info to other player
+                    if (p.detu != null && p.detu.state == client.Disciple.STATE_SUMMONED) {
+                        // Send disciple position via Message(4)
+                        Message mDetu4 = new Message(4);
+                        mDetu4.writer().writeByte(0);
+                        mDetu4.writer().writeShort(0);
+                        mDetu4.writer().writeShort(p.detu.id);
+                        mDetu4.writer().writeShort(p.detu.summon_x);
+                        mDetu4.writer().writeShort(p.detu.summon_y);
+                        mDetu4.writer().writeByte(-1);
+                        p0.conn.addmsg(mDetu4);
+                        mDetu4.cleanup();
+                        // Send disciple full info via Message(5)
+                        p.detu.send_in4(map, p0);
+                    }
                 }
             } else if (p.other_player_inside.containsKey(p0.id)) {
+                System.out.println("[VISIBILITY] PLAYER_LEAVE view player=" + p.name + " loses=" + p0.name + " dist=" + distX + "," + distY);
                 Message m3 = new Message(8);
                 m3.writer().writeShort(p.id);
                 p0.conn.addmsg(m3);
@@ -401,6 +511,43 @@ public class MapService {
             if (p_target.getlevelpercent() < 0) {
                 dmob *= 2;
             }
+            // === EFFECT CHECKS (mob -> player) ===
+            // kien ma thuat: giam 50% st neu hp > 10%
+            if (dmob > 0 && p_target.hp > 0) {
+                long max_hp = p_target.body.get_max_hp();
+                if (max_hp > 0 && p_target.hp > max_hp / 10) {
+                    EffTemplate efShield = p_target.get_eff(-200);
+                    if (efShield != null) {
+                        dmob = dmob / 2;
+                    }
+                }
+            }
+            // giap hac am: chuyen 1 phan st thanh giap
+            if (dmob > 0 && p_target.hp > 0) {
+                EffTemplate efDarkArmor = p_target.get_eff(-203);
+                if (efDarkArmor != null) {
+                    long absorb = (dmob * efDarkArmor.param) / 100;
+                    p_target.hp += absorb;
+                    dmob -= absorb;
+                    if (dmob < 0) dmob = 0;
+                }
+            }
+            // ngoc luc bao: chuyen 10% st thanh hp
+            if (dmob > 0 && p_target.hp > 0) {
+                EffTemplate efLucBao = p_target.get_eff(-213);
+                if (efLucBao != null) {
+                    long heal = (dmob * 10) / 100;
+                    p_target.hp += heal;
+                }
+            }
+            // ngoc khai hoan: tinh hit bi danh
+            if (dmob > 0 && p_target.hp > 0) {
+                p_target.hit_count_ngoc_khai_hoan++;
+                if (p_target.hit_count_ngoc_khai_hoan >= 25) {
+                    p_target.hit_count_ngoc_khai_hoan = 0;
+                    p_target.add_eff(-211, 20, 3000);
+                }
+            }
             int percent_stun = 0;
             int time_stun = 0;
             if (mob.is_boss) {
@@ -420,6 +567,51 @@ public class MapService {
                         percent_stun = 50;
                         time_stun = 5;
                         break;
+                    }
+                }
+            }
+            // === IMMUNITY EFFECTS (mob -> player) ===
+            // mien st: bo qua st mob khi bi danh
+            if (dmob > 0 && p_target.hp > 0) {
+            int[][] immunityCheck = {
+                {-220, -123}, {-221, -122}, {-222, -121}, {-223, -120}, {-224, -119}
+            };
+                for (int[] ic : immunityCheck) {
+                    int param = get_combat_effect_param(p_target, ic[0], ic[1]);
+                    if (param > 0 && param > Util.random(100)) {
+                        dmob = 0;
+                        p_target.show_eff_p(15, 1000);
+                        break;
+                    }
+                }
+            }
+            // giap bao ho: giam st mob
+            if (dmob > 0 && p_target.hp > 0) {
+                int gbhParam = get_combat_effect_param(p_target, -225, -114);
+                if (gbhParam > 0) {
+                    long now = System.currentTimeMillis();
+                    if (p_target.giap_bao_ho_time < now) {
+                        p_target.giap_bao_ho_hit_count = 0;
+                        p_target.giap_bao_ho_time = now + 10000L;
+                    }
+                    p_target.giap_bao_ho_hit_count++;
+                    if (p_target.giap_bao_ho_hit_count == 2) {
+                        dmob = dmob * 75 / 100;
+                        p_target.show_eff_p(14, 1000);
+                    } else if (p_target.giap_bao_ho_hit_count >= 3) {
+                        dmob = dmob * 50 / 100;
+                        p_target.show_eff_p(14, 1000);
+                    }
+                }
+            }
+            // thieu chay: aoe 5000/3s khi hp <= 30%
+            if (dmob > 0 && p_target.hp > 0) {
+                long max_hp_target = p_target.body.get_max_hp();
+                if (max_hp_target > 0 && p_target.hp <= max_hp_target * 30 / 100) {
+                    EffTemplate efTC = p_target.get_eff(-235);
+                    if (efTC == null && System.currentTimeMillis() > p_target.time_thieu_chay_cd) {
+                        p_target.add_eff(-235, 5000, 20000);
+                        p_target.time_thieu_chay_cd = System.currentTimeMillis() + 30000L;
                     }
                 }
             }
@@ -531,8 +723,12 @@ public class MapService {
     }
 
     public static void change_flag(Map map, Player p_target, int type) throws IOException {
+        if (p_target.is_detu_training) {
+            // Không được đổi cờ / PK khi đang luyện đệ tử
+            return;
+        }
         if ((map.zone_id == map.maxzone && type != -1 && p_target.item.wear[11] != null
-                && p_target.item.wear[11].id != 3593) || map.map_id == 102 || Map.is_map_chien_truong(map.map_id)) {
+                && p_target.item.wear[11].id != 3593) || (Map.is_khu_2(map) && type != -1) || map.map_id == 102 || Map.is_map_chien_truong(map.map_id)) {
             return;
         }
         Message m = new Message(42);
@@ -541,6 +737,16 @@ public class MapService {
         p_target.typepk = (byte) type;
         MapService.send_msg_player_inside(map, p_target, m, true);
         m.cleanup();
+
+        // Đồng bộ cờ cho đệ tử được gọi ra (nếu có)
+        if (p_target.detu != null && p_target.detu.state == client.Disciple.STATE_SUMMONED) {
+            for (int i = 0; i < map.players.size(); i++) {
+                Player p0 = map.players.get(i);
+                if (p0 != null && p0.conn != null) {
+                    p_target.detu.send_in4(map, p0);
+                }
+            }
+        }
     }
 
     @SuppressWarnings("unused")
@@ -1322,7 +1528,7 @@ public class MapService {
             }
             Message m = new Message(5);
             m.writer().writeShort(p0.id);
-            m.writer().writeUTF(p0.name);
+            m.writer().writeUTF(p0.item.wear[19] != null ? "" : p0.name);
             m.writer().writeShort(p0.x);
             m.writer().writeShort(p0.y);
             m.writer().writeByte(p0.clazz);
@@ -1400,13 +1606,14 @@ m.writer().writeInt ((int) Math.min(p0.hp, Integer.MAX_VALUE));
             m.writer().writeBoolean(false);
             m.writer().writeByte(1);
             m.writer().writeByte(0);
-            m.writer().writeShort(p0.id_name != -1 ? p0.id_name : Service.get_id_mat_na(p0)); // mat na
+            m.writer().writeShort(Service.get_id_mat_na(p0)); // mat na
             m.writer().writeByte(1); // paint mat na trc sau
             m.writer().writeShort(Service.get_id_phiphong(p0)); // phi phong
             m.writer().writeShort(Service.get_id_weapon(p0)); // weapon
             m.writer().writeShort(p0.id_horse);
             m.writer().writeShort(Service.get_id_hair(p0)); // hair
             m.writer().writeShort(Service.get_id_wing(p0)); // wing
+            m.writer().writeShort(p0.id_name); // id_name
             m.writer().writeShort(-1); // body
             m.writer().writeShort(-1); // leg
             m.writer().writeShort(-1); // bienhinh
@@ -1525,6 +1732,10 @@ m.writer().writeInt ((int) Math.min(p0.hp, Integer.MAX_VALUE));
                 conn.p.time_delay_skill[index_skill] = System.currentTimeMillis() + ((temp.delay * 199) / 200);
                 conn.p.enough_time_disconnect = 0;
                 if (conn.p.get_eff(-124) != null || conn.p.get_eff(-122) != null || conn.p.get_eff(-121) != null) {
+                    return;
+                }
+                // lu loan: khong tan cong duoc
+                if (conn.p.get_eff(-205) != null) {
                     return;
                 }
                 EffTemplate ef;
@@ -1707,6 +1918,11 @@ m.writer().writeInt ((int) Math.min(p0.hp, Integer.MAX_VALUE));
                 if (temp2 != null) {
                     dame *= 2;
                 }
+                // ngoc hon nguyen moi: x2 dame 3s
+                temp2 = conn.p.get_eff(-210);
+                if (temp2 != null) {
+                    dame *= 2;
+                }
                 temp2 = conn.p.get_eff(32001);
                 if (temp2 != null) {
                     long hp = (temp2.param * conn.p.body.get_max_hp()) / 100;
@@ -1715,6 +1931,19 @@ m.writer().writeInt ((int) Math.min(p0.hp, Integer.MAX_VALUE));
                         conn.p.hp = conn.p.body.get_max_hp();
                     }
                     Service.usepotion(conn.p, 0, hp);
+                }
+                // ngoc phong ma moi: hoi hp khi hp < 20%
+                temp2 = conn.p.get_eff(-212);
+                if (temp2 != null) {
+                    long max_hp = conn.p.body.get_max_hp();
+                    if (max_hp > 0 && conn.p.hp < max_hp / 5) {
+                        long heal = (max_hp * temp2.param) / 100;
+                        conn.p.hp += heal;
+                        if (conn.p.hp > max_hp) {
+                            conn.p.hp = max_hp;
+                        }
+                        Service.usepotion(conn.p, 0, (int) heal);
+                    }
                 }
 
                 if (dame > 2_000_000_000) {
@@ -1772,6 +2001,11 @@ m.writer().writeInt ((int) Math.min(p0.hp, Integer.MAX_VALUE));
                         } else {
                             Mob_in_map mob_target = MapService.get_mob_by_index(map, n2);
                             if (mob_target != null) {
+                                conn.p.currentTarget = mob_target;
+                                if (conn.p.detu != null && conn.p.detu.state == client.Disciple.STATE_SUMMONED) {
+                                    conn.p.detu.target_mob = mob_target;
+                                    conn.p.detu.updateAI(map);
+                                }
                                 MapService.fire_mob(map, mob_target, conn.p, index_skill, dame);
                             } else if (conn.p.map.map_id == 48) {
                                 } else if (conn.p.map.map_id == 48) {
@@ -1786,6 +2020,15 @@ m.writer().writeInt ((int) Math.min(p0.hp, Integer.MAX_VALUE));
                                 Mob_MoTaiNguyen temp_mob = conn.p.myclan.get_mo_tai_nguyen(n2);
                                 if (temp_mob == null) {
                                     temp_mob = Manager.gI().chiem_mo.get_mob_in_map(conn.p.map);
+                                    if (temp_mob != null) {
+                                        conn.p.currentTargetMo = temp_mob;
+                                        conn.p.currentTarget = null;
+                                        if (conn.p.detu != null && conn.p.detu.state == client.Disciple.STATE_SUMMONED) {
+                                            conn.p.detu.target_mo = temp_mob;
+                                            conn.p.detu.target_mob = null;
+                                            conn.p.detu.updateAI(map);
+                                        }
+                                    }
                                     Message m_atk = new Message(9);
                                     m_atk.writer().writeShort(conn.p.id);
                                     m_atk.writer().writeByte(index_skill);
@@ -1804,6 +2047,10 @@ m.writer().writeInt ((int) Math.min(p0.hp, Integer.MAX_VALUE));
                                     if (temp_mob.hp <= 0 && temp_mob.is_atk) {
 //                                        temp_mob.is_atk = false;
                                         temp_mob.hp = 0;
+                                        conn.p.currentTargetMo = null;
+                                        if (conn.p.detu != null && conn.p.detu.state == client.Disciple.STATE_SUMMONED) {
+                                            conn.p.detu.target_mo = null;
+                                        }
                                         if (conn.p.nv_tinh_tu[0] == 27 && conn.p.nv_tinh_tu[1] < conn.p.nv_tinh_tu[2]) {
 											conn.p.nv_tinh_tu[1]++;
 										}
@@ -1914,6 +2161,9 @@ m.writer().writeInt ((int) Math.min(p0.hp, Integer.MAX_VALUE));
                         }
                     }
                 } else if (type_atk == 1) {
+                    if (Map.is_khu_2(map)) {
+                        return;
+                    }
                     for (int i = 0; i < n; ++i) {
                         int n2 = Short.toUnsignedInt(m.reader().readShort());
 
@@ -1947,7 +2197,11 @@ m.writer().writeInt ((int) Math.min(p0.hp, Integer.MAX_VALUE));
                                             dame = 1;
                                         }
                                         //
+                                        SpecialDamage spDame = SpecialDamage.calculate(conn.p);
                                         temp_mob.nhanban.hp -= dame;
+                                        if (spDame.damage > 0) {
+                                            temp_mob.nhanban.hp -= spDame.damage;
+                                        }
                                         if (temp_mob.nhanban.hp <= 0) {
                                             Manager.gI().remove_list_nhanbban(temp_mob.nhanban);
                                             temp_mob.nhanban.hp = 0;
@@ -1976,10 +2230,12 @@ m.writer().writeInt ((int) Math.min(p0.hp, Integer.MAX_VALUE));
                                         }
                                         m_p_2_nb.writer().writeInt((int) Math.min(conn.p.hp, Integer.MAX_VALUE));
                                         m_p_2_nb.writer().writeInt(conn.p.mp); // mp nhan ban
-                                        m_p_2_nb.writer().writeByte(11);
-                                        m_p_2_nb.writer().writeInt(0);
+                                        m_p_2_nb.writer().writeByte(spDame.damage > 0 ? (spDame.type == SpecialDamage.TYPE_LIGHT ? 10 : 11) : 11);
+                                        m_p_2_nb.writer().writeInt(spDame.damage > 0 ? spDame.damage : 0);
                                         MapService.send_msg_player_inside(conn.p.map, conn.p, m_p_2_nb, true);
                                         m_p_2_nb.cleanup();
+
+
                                     }
 
                                 }
@@ -1991,6 +2247,22 @@ m.writer().writeInt ((int) Math.min(p0.hp, Integer.MAX_VALUE));
                 }
             }
         }
+    }
+
+    // check combat effect from gems (effId) OR equipment (optionId), return max param
+    private static int get_combat_effect_param(Player p, int effId, int optionId) {
+        int gemParam = 0;
+        EffTemplate ef = p.get_eff(effId);
+        if (ef != null) {
+            gemParam = ef.param;
+        }
+        int equipParam = p.body.get_equipment_effect(optionId);
+        return Math.max(gemParam, equipParam);
+    }
+
+    // check if player has combat effect from gems or equipment
+    private static boolean has_combat_effect(Player p, int effId, int optionId) {
+        return get_combat_effect_param(p, effId, optionId) > 0;
     }
 
     private static Player get_player_by_id(Map map, int n2) {
@@ -2005,7 +2277,20 @@ m.writer().writeInt ((int) Math.min(p0.hp, Integer.MAX_VALUE));
     public static void fire_player(Map map, Player p0, Player p, byte indexskill, long dame_atk, int type_atk)
             throws IOException {
         if (p0 == null || p0.id == p.id || p.map.ismaplang || p.level < 11 || p0.level < 11
-                || (p.typepk != 0 && p.typepk == p0.typepk) || p.hieuchien > 320_000) {
+                || (p.typepk != 0 && p.typepk == p0.typepk) || p.hieuchien > 320_000
+                || Map.is_khu_2(map) || Map.is_khu_2(p.map) || Map.is_khu_2(p0.map)) {
+            return;
+        }
+        // Đệ tử đang luyện không được PK
+        if (p.is_detu_training) {
+            return;
+        }
+        // Đệ tử dưới level 30 không bị đồ sát
+        if (p0.is_detu_training && p0.level < 30) {
+            return;
+        }
+        // lu loan: khong tan cong duoc
+        if (p.get_eff(-205) != null) {
             return;
         }
         if (map.ld != null) {
@@ -2037,11 +2322,23 @@ m.writer().writeInt ((int) Math.min(p0.hp, Integer.MAX_VALUE));
         if ((p0.get_eff(-126) != null || p.get_eff(-126) != null) && p0.map.ld == null) {
             return;
         }
+        // === STAT REDUCTION EFFECTS ===
+        // giap ve binh: giam xuyen giap cua nguoi danh di 90%
+        int gvbParam = get_combat_effect_param(p, -231, -81);
+        if (gvbParam > 0) {
+            p.add_eff(-231, 90, 3000);
+            p.show_eff_p(26, 1000);
+        }
         EffTemplate ef = null;
         int cr = p.body.get_crit();
         ef = p.get_eff(33);
         if (ef != null) {
             cr += ef.param;
+        }
+        // giap bach kim: giam chi mang cua ke danh di 90%
+        int gbkAtkParam = get_combat_effect_param(p0, -229, -85);
+        if (gbkAtkParam > 0) {
+            cr = cr * 10 / 100;
         }
         boolean crit = cr > Util.random(0, 15000);
         boolean pierce = false;
@@ -2049,6 +2346,11 @@ m.writer().writeInt ((int) Math.min(p0.hp, Integer.MAX_VALUE));
         ef = p0.get_eff(35);
         if (ef != null) {
             rc_dame += ef.param;
+        }
+        // giap thien su: giam phan dame cua ke danh di 90%
+        int gtsAtkParam = get_combat_effect_param(p0, -230, -83);
+        if (gtsAtkParam > 0) {
+            rc_dame = rc_dame * 10 / 100;
         }
         boolean react_dame = rc_dame > Util.random(0, 15000);
         if (crit) {
@@ -2059,6 +2361,11 @@ m.writer().writeInt ((int) Math.min(p0.hp, Integer.MAX_VALUE));
             ef = p.get_eff(36);
             if (ef != null) {
                 pier += ef.param;
+            }
+            // giap ve binh: giam xuyen giap cua ke danh di 90%
+            int gvbAtkParam = get_combat_effect_param(p, -231, -81);
+            if (gvbAtkParam > 0) {
+                pier = pier * 10 / 100;
             }
             if (pier > Util.random(0, 15000)) {
                 pierce = true;
@@ -2090,6 +2397,16 @@ m.writer().writeInt ((int) Math.min(p0.hp, Integer.MAX_VALUE));
         if (ef != null) {
             miss += ef.param;
         }
+        // chinh xac: giam ne tranh cua ke thu di 90%
+        int cxAtkParam = get_combat_effect_param(p, -228, -86);
+        if (cxAtkParam > 0) {
+            miss = miss * 10 / 100;
+        }
+        // mu mat: lam skill hu, giam ne tranh = 100%
+        int mmDefParam = get_combat_effect_param(p0, -233, -116);
+        if (mmDefParam > 0) {
+            miss = 100;
+        }
 
         if (miss > Util.random(0, 2_000_000)) {
             dame = 0;
@@ -2103,6 +2420,265 @@ m.writer().writeInt ((int) Math.min(p0.hp, Integer.MAX_VALUE));
         if (dame > 2_000_000_000) {
             dame = 2_000_000_000;
         }
+
+        // === EFFECT CHECKS ===
+        // kien ma thuat: giam 50% st neu hp > 10%
+        if (dame > 0 && p0.hp > 0) {
+            long max_hp = p0.body.get_max_hp();
+            if (max_hp > 0 && p0.hp > max_hp / 10) {
+                EffTemplate efShield = p0.get_eff(-200);
+                if (efShield != null) {
+                    dame = dame / 2;
+                }
+            }
+        }
+        // giap hac am: chuyen 1 phan st thanh giap tam thoi
+        if (dame > 0 && p0.hp > 0) {
+            EffTemplate efDarkArmor = p0.get_eff(-203);
+            if (efDarkArmor != null) {
+                long absorb = (dame * efDarkArmor.param) / 100;
+                p0.hp += absorb;
+                dame -= absorb;
+                if (dame < 0) dame = 0;
+            }
+        }
+        // ngoc luc bao: chuyen 10% st thanh hp
+        if (dame > 0 && p0.hp > 0) {
+            EffTemplate efLucBao = p0.get_eff(-213);
+            if (efLucBao != null) {
+                long heal = (dame * 10) / 100;
+                p0.hp += heal;
+            }
+        }
+        // ngoc khai hoan: tinh hit bi danh
+        if (dame > 0 && p0.hp > 0) {
+            p0.hit_count_ngoc_khai_hoan++;
+            if (p0.hit_count_ngoc_khai_hoan >= 25) {
+                p0.hit_count_ngoc_khai_hoan = 0;
+                p0.add_eff(-211, 20, 3000);
+            }
+        }
+        // lu loan: khong tan cong duoc
+        if (dame > 0 && p0.get_eff(-205) != null) {
+            dame = 0;
+        }
+
+        // === NEW COMBAT EFFECTS (DEFENDER) ===
+        // mien st: bo qua st theo ty le khi bi danh
+        if (dame > 0 && p0.hp > 0) {
+            int[][] immunityCheck = {
+                {-220, -123}, // lua → 133
+                {-221, -122}, // doc → 134
+                {-222, -121}, // vl → 135
+                {-223, -120}, // bang → 136
+                {-224, -119}  // dien → 137
+            };
+            for (int[] ic : immunityCheck) {
+                int param = get_combat_effect_param(p0, ic[0], ic[1]);
+                if (param > 0 && (param >= 100 || param > Util.random(10000))) {
+                    dame = 0;
+                    p0.show_eff_p(15, 1000);
+                    break;
+                }
+            }
+        }
+        // giap bao ho: giam st nguoi danh (100%->75%->50%) trong 10s
+        if (dame > 0 && p0.hp > 0) {
+            int gbhParam = get_combat_effect_param(p0, -225, -114);
+            if (gbhParam > 0) {
+                long now = System.currentTimeMillis();
+                if (p0.giap_bao_ho_time < now) {
+                    p0.giap_bao_ho_hit_count = 0;
+                    p0.giap_bao_ho_time = now + 10000L;
+                }
+                p0.giap_bao_ho_hit_count++;
+                if (p0.giap_bao_ho_hit_count == 2) {
+                    dame = dame * 75 / 100;
+                    p0.show_eff_p(14, 1000);
+                } else if (p0.giap_bao_ho_hit_count >= 3) {
+                    dame = dame * 50 / 100;
+                    p0.show_eff_p(14, 1000);
+                }
+            }
+        }
+        // boc pha: khi bi danh co ty le no gay st 10-40% hp quanh 6 o
+        if (dame > 0 && p0.hp > 0) {
+            int bpParam = get_combat_effect_param(p0, -226, -125);
+            if (bpParam > 0 && System.currentTimeMillis() > p0.time_boc_pha_cd) {
+                if (bpParam >= 100 || bpParam > Util.random(10000)) {
+                    long max_hp = p0.body.get_max_hp();
+                    long explosion_dame = max_hp * (10 + Util.random(31)) / 100;
+                    p0.time_boc_pha_cd = System.currentTimeMillis() + 5000L;
+                    p0.show_eff_p(16, 1000);
+                    if (!Map.is_khu_2(map)) {
+                        for (Player p2 : map.players) {
+                            if (p2 != null && p2.id != p0.id && !p2.isdie && !p0.isdie) {
+                                int dx = Math.abs(p2.x - p0.x);
+                                int dy = Math.abs(p2.y - p0.y);
+                                if (dx <= 6 * 24 && dy <= 6 * 24) {
+                                    p2.hp -= explosion_dame;
+                                    Service.usepotion(p2, 0, -(int) explosion_dame);
+                                    if (p2.hp <= 0) {
+                                        p2.hp = 0;
+                                        MapService.die_by_player(map, p2, p0);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // mu mat: lam doi thu bi mu, skill hu
+        if (dame > 0 && p0.hp > 0) {
+            int mmParam = get_combat_effect_param(p, -233, -116);
+            if (mmParam > 0 && (mmParam >= 100 || mmParam > Util.random(10000))) {
+                int dur = p.body.get_effect_duration(140, 5000);
+                p0.add_eff(-233, 1, dur);
+                p0.show_eff_p(18, 1000);
+            }
+        }
+        // bong lua: gay bong lua cho ke thu khi tan cong (mat hp/s theo % trong thoi gian ton tai)
+        if (dame > 0 && p0.hp > 0) {
+            int blParam = p.body.get_equipment_effect(76);
+            if (blParam > 0 && (blParam >= 100 || blParam > Util.random(10000))) {
+                int dur = p.body.get_effect_duration(77, 5000);
+                p0.add_eff(-202, 5, dur);
+                p0.show_eff_p(1, 1000);
+            }
+        }
+        // bong lanh: gay bong lanh cho ke thu khi tan cong (mat mp/s theo % trong thoi gian ton tai)
+        if (dame > 0 && p0.hp > 0) {
+            int blnParam = p.body.get_equipment_effect(78);
+            if (blnParam > 0 && (blnParam >= 100 || blnParam > Util.random(10000))) {
+                int dur = p.body.get_effect_duration(79, 5000);
+                p0.add_eff(-201, 5, dur);
+                p0.show_eff_p(2, 1000);
+            }
+        }
+        // lu loan: gay lu loan cho ke thu (khong tan cong duoc trong thoi gian ton tai)
+        if (dame > 0 && p0.hp > 0) {
+            int llParam = p.body.get_equipment_effect(87);
+            if (llParam > 0 && (llParam >= 100 || llParam > Util.random(10000))) {
+                int dur = p.body.get_effect_duration(88, 3000);
+                p0.add_eff(-205, 1, dur);
+                p0.show_eff_p(13, 1000);
+            }
+        }
+        // vet thuong sau: gay vet thuong sau cho ke thu (giam 50% hoi phuc hp)
+        if (dame > 0 && p0.hp > 0) {
+            int vtsParam = p.body.get_equipment_effect(97);
+            if (vtsParam > 0 && (vtsParam >= 100 || vtsParam > Util.random(10000))) {
+                int dur = p.body.get_effect_duration(98, 5000);
+                p0.add_eff(-206, 50, dur);
+                p0.show_eff_p(18, 1000);
+            }
+        }
+        // khien ma thuat: khi bi tan cong co ty le bat khien ma thuat
+        if (dame > 0 && p0.hp > 0) {
+            int kmtParam = p0.body.get_equipment_effect(85);
+            if (kmtParam > 0 && (kmtParam >= 100 || kmtParam > Util.random(10000))) {
+                if (p0.get_eff(-200) == null) {
+                    int dur = p0.body.get_effect_duration(86, 5000);
+                    p0.add_eff(-200, 50, dur);
+                    p0.show_eff_p(6, 1000);
+                }
+            }
+        }
+        // giap hac am: khi bi tan cong co ty le bat giap hac am
+        if (dame > 0 && p0.hp > 0) {
+            int ghaParam = p0.body.get_equipment_effect(80);
+            if (ghaParam > 0 && (ghaParam >= 100 || ghaParam > Util.random(10000))) {
+                if (p0.get_eff(-203) == null) {
+                    p0.add_eff(-203, 30, 5000);
+                    p0.show_eff_p(7, 1000);
+                }
+            }
+        }
+        // tang hinh: khi tan cong hoac bi tan cong co ty le tang hinh
+        if (dame > 0 && p.hp > 0) {
+            int thParam = p.body.get_equipment_effect(82);
+            if (thParam > 0 && (thParam >= 100 || thParam > Util.random(10000))) {
+                if (p.get_eff(-204) == null) {
+                    int dur = p.body.get_effect_duration(81, 5000);
+                    p.add_eff(-204, 1, dur);
+                    p.show_eff_p(17, 1000);
+                }
+            }
+        }
+        // ngu dan: tat pet doi thu 30s
+        if (dame > 0 && p0.hp > 0) {
+            int ndParam = get_combat_effect_param(p, -232, -90);
+            if (ndParam > 0 && (ndParam >= 100 || ndParam > Util.random(10000))) {
+                p0.time_ngu_dan_target = System.currentTimeMillis() + 30000L;
+                p0.show_eff_p(19, 1000);
+            }
+        }
+        // tan phere: giam mp doi thu con 1%, cam hoi mp 5s
+        if (dame > 0 && p0.hp > 0) {
+            int tpParam = get_combat_effect_param(p, -236, -92);
+            if (tpParam > 0 && (tpParam >= 100 || tpParam > Util.random(10000))) {
+                p0.mp = 1;
+                p0.add_eff(-236, 1, 5000);
+                p0.show_eff_p(21, 1000);
+            }
+        }
+        // thieu chay: aoe 5000/3s khi hp <= 30%, 20s
+        if (dame > 0 && p0.hp > 0) {
+            long max_hp = p0.body.get_max_hp();
+            if (max_hp > 0 && p0.hp <= max_hp * 30 / 100) {
+                int tcParam = get_combat_effect_param(p0, -235, -115);
+                if (tcParam > 0) {
+                    EffTemplate efTC = p0.get_eff(-235);
+                    if (efTC == null && System.currentTimeMillis() > p0.time_thieu_chay_cd) {
+                        p0.add_eff(-235, 5000, 20000);
+                        p0.time_thieu_chay_cd = System.currentTimeMillis() + 30000L;
+                        p0.show_eff_p(20, 1000);
+                    }
+                }
+            }
+        }
+        // bat tu: kiem tra hp <= 5% -> bat tu 5s
+        if (dame > 0 && p0.hp > 0) {
+            long max_hp = p0.body.get_max_hp();
+            if (max_hp > 0 && p0.hp - dame <= max_hp * 5 / 100 && p0.hp - dame > 0) {
+                int btParam = get_combat_effect_param(p0, -234, -88);
+                if (btParam > 0) {
+                    EffTemplate efBT = p0.get_eff(-234);
+                    if (efBT == null && System.currentTimeMillis() > p0.time_bat_tu_cd) {
+                        p0.add_eff(-234, 1, 5000);
+                        dame = 0;
+                        p0.time_bat_tu_cd = System.currentTimeMillis() + 30000L;
+                        p0.show_eff_p(22, 1000);
+                    }
+                }
+            }
+        }
+        // chinh xac: giam ne tranh 90% cua ke thu
+        if (dame > 0 && p0.hp > 0) {
+            int cxParam = get_combat_effect_param(p, -228, -86);
+            if (cxParam > 0) {
+                p0.add_eff(-228, 90, 3000);
+                p0.show_eff_p(23, 1000);
+            }
+        }
+        // giap bach kim: giam chi mang 90% cua ke thu
+        if (dame > 0 && p0.hp > 0) {
+            int gbkParam = get_combat_effect_param(p, -229, -85);
+            if (gbkParam > 0) {
+                p0.add_eff(-229, 90, 3000);
+                p0.show_eff_p(24, 1000);
+            }
+        }
+        // giap thien su: giam phan dame 90% cua ke thu
+        if (dame > 0 && p0.hp > 0) {
+            int gtsParam = get_combat_effect_param(p, -230, -83);
+            if (gtsParam > 0) {
+                p0.add_eff(-230, 90, 3000);
+                p0.show_eff_p(25, 1000);
+            }
+        }
+
         //
         boolean affect_special_skill = 5 > Util.random(0, 100);
         if (affect_special_skill && p.clazz == 2 && type_atk == 1) {
@@ -2111,14 +2687,48 @@ m.writer().writeInt ((int) Math.min(p0.hp, Integer.MAX_VALUE));
         }
         //
 
+        // Special damage (Light / Dark) calculation
+        SpecialDamage spDame = SpecialDamage.calculate(p);
+
         if (Manager.gI().bossTG.p.equals(p0)) {
-            Manager.gI().bossTG.update_dame(p.name, dame);
+            Manager.gI().bossTG.update_dame(p.name, dame + (spDame.damage > 0 ? spDame.damage : 0));
             if (p0.hp < p0.body.get_max_hp() / 2) {
                 Service.usepotion(p0, 0, p0.body.get_max_hp());
             }
         }
 
         p0.hp -= dame;
+        if (spDame.damage > 0) {
+            p0.hp -= spDame.damage;
+        }
+
+        // === EFFECTS AFTER DAMAGE ===
+        // hung tan: khi danh trung, tinh hit, dat yeu cau thi hut 3-5% max hp
+        if (dame > 0 && p.hp > 0) {
+            int htParam = get_combat_effect_param(p, -227, -117);
+            if (htParam > 0) {
+                long now = System.currentTimeMillis();
+                if (p.time_hung_tan < now) {
+                    p.hung_tan_hit_count = 0;
+                    p.hung_tan_required_hits = 5 + Util.random(6); // 5-10 hit
+                    p.time_hung_tan = now + 20000L;
+                }
+                p.hung_tan_hit_count++;
+                if (p.hung_tan_hit_count >= p.hung_tan_required_hits) {
+                    p.hung_tan_hit_count = 0;
+                    long max_hp = p.body.get_max_hp();
+                    long heal = max_hp * (3 + Util.random(3)) / 100; // 3-5% max hp
+                    p.hp += heal;
+                    if (p.hp > max_hp) {
+                        p.hp = max_hp;
+                    }
+                    Service.usepotion(p, 0, (int) heal);
+                    p.show_eff_p(27, 1000);
+                    p.hung_tan_required_hits = 5 + Util.random(6);
+                }
+            }
+        }
+        // bat tu: kiem tra hp <= 5% -> bat tu 5s
         if (p0.hp <= 0) {
 
             p0.hp = 0;
@@ -2251,10 +2861,11 @@ m.writer().writeInt ((int) Math.min(p0.hp, Integer.MAX_VALUE));
         }
         m.writer().writeInt((int) Math.min(p.hp, Integer.MAX_VALUE));
         m.writer().writeInt(p.mp);
-        m.writer().writeByte(11);
-        m.writer().writeInt(0);
+        m.writer().writeByte(spDame.damage > 0 ? (spDame.type == SpecialDamage.TYPE_LIGHT ? 10 : 11) : 11);
+        m.writer().writeInt(spDame.damage > 0 ? spDame.damage : 0);
         MapService.send_msg_player_inside(map, p, m, true);
         m.cleanup();
+
         //
         // affect_special_skill
         if (affect_special_skill) {
@@ -2429,6 +3040,9 @@ m.writer().writeInt ((int) Math.min(p0.hp, Integer.MAX_VALUE));
             dame = 0;
         }
         if (mob.template.mob_id != 174 && !Map.is_map_chien_truong(map.map_id) && (dame < 0 || (mob.is_boss && (Math.abs(mob.level - p.level) > 5)))) {
+            // Boss validation rule:
+            // When disciple is summoned, apply current character (master) boss check: level diff <= 5
+            // When directly training disciple, disciple attacks boss according to disciple's level and combat rules
             dame = 0;
         }
         if (dame > 2_000_000_000) {
@@ -2439,13 +3053,75 @@ m.writer().writeInt ((int) Math.min(p0.hp, Integer.MAX_VALUE));
             dame /= 100;
         }
 
+        // Special damage (Light / Dark) calculation
+        SpecialDamage spDame = SpecialDamage.calculate(p);
+
         mob.hp -= dame;
+        if (spDame.damage > 0) {
+            mob.hp -= spDame.damage;
+        }
         // top dame
+        long totalDameGiven = dame + (spDame.damage > 0 ? spDame.damage : 0);
         if (!mob.top_dame.containsKey(p.name)) {
-            mob.top_dame.put(p.name, (long) dame);
+            mob.top_dame.put(p.name, totalDameGiven);
         } else {
-            long dame_boss = dame + mob.top_dame.get(p.name);
+            long dame_boss = totalDameGiven + mob.top_dame.get(p.name);
             mob.top_dame.put(p.name, dame_boss);
+        }
+
+        // === COMBAT EFFECTS ON MONSTERS (Attacker p -> mob) ===
+        if (dame > 0 && mob.hp > 0 && !mob.isdie) {
+            // mu mat: 140 / -116
+            int mmParam = get_combat_effect_param(p, -233, -116);
+            if (mmParam > 0 && (mmParam >= 100 || mmParam > Util.random(10000))) {
+                // visual effect on attacker/target
+                p.show_eff_p(18, 1000);
+            }
+            // bong lua: 76 (100% khi co opt 100%)
+            int blParam = p.body.get_equipment_effect(76);
+            if (blParam > 0 && (blParam >= 100 || blParam > Util.random(10000))) {
+                p.show_eff_p(1, 1000);
+            }
+            // bong lanh: 78
+            int blnParam = p.body.get_equipment_effect(78);
+            if (blnParam > 0 && (blnParam >= 100 || blnParam > Util.random(10000))) {
+                p.show_eff_p(2, 1000);
+            }
+            // lu loan: 87
+            int llParam = p.body.get_equipment_effect(87);
+            if (llParam > 0 && (llParam >= 100 || llParam > Util.random(10000))) {
+                p.show_eff_p(13, 1000);
+            }
+            // tang hinh: 82
+            int thParam = p.body.get_equipment_effect(82);
+            if (thParam > 0 && (thParam >= 100 || thParam > Util.random(10000))) {
+                if (p.get_eff(-204) == null) {
+                    int dur = p.body.get_effect_duration(81, 5000);
+                    p.add_eff(-204, 1, dur);
+                    p.show_eff_p(17, 1000);
+                }
+            }
+            // hung tan: 139 / -117
+            int htParam = get_combat_effect_param(p, -227, -117);
+            if (htParam > 0) {
+                long now = System.currentTimeMillis();
+                if (p.time_hung_tan < now) {
+                    p.hung_tan_hit_count = 0;
+                    p.hung_tan_required_hits = 5 + Util.random(6);
+                    p.time_hung_tan = now + 20000L;
+                }
+                p.hung_tan_hit_count++;
+                if (p.hung_tan_hit_count >= p.hung_tan_required_hits) {
+                    p.hung_tan_hit_count = 0;
+                    long max_hp = p.body.get_max_hp();
+                    long heal = max_hp * (3 + Util.random(3)) / 100;
+                    p.hp += heal;
+                    if (p.hp > max_hp) p.hp = max_hp;
+                    Service.usepotion(p, 0, (int) heal);
+                    p.show_eff_p(27, 1000);
+                    p.hung_tan_required_hits = 5 + Util.random(6);
+                }
+            }
         }
         // if mob die
         if (mob.hp <= 0) {
@@ -2454,6 +3130,15 @@ m.writer().writeInt ((int) Math.min(p0.hp, Integer.MAX_VALUE));
             if (!mob.isdie) {
                 mob.isdie = true;
                 mob.time_back = System.currentTimeMillis() + (Mob_in_map.time_refresh * 1000) - 1000L;
+                p.currentTarget = null;
+                if (p.detu != null && p.detu.state == client.Disciple.STATE_SUMMONED) {
+                    if (mob.template != null) {
+                        p.detu.lastFarmMonsterType = mob.template.mob_id;
+                    }
+                    if (p.detu.target_mob == mob) {
+                        p.detu.target_mob = null;
+                    }
+                }
 if (mob.template.mob_id == 23 || mob.template.mob_id == 17) {
 					Session conn = p.conn;
 					if (conn.p.nv_tinh_tu[0] == 7 && conn.p.nv_tinh_tu[1] < conn.p.nv_tinh_tu[2]) {
@@ -2493,40 +3178,65 @@ if (mob.template.mob_id == 23 || mob.template.mob_id == 17) {
                     Mob_in_map.num_boss--;
                 } else {
                     // item drop
-                    if (Math.abs(mob.level - p.level) <= 10 && !check_mob_roi_ngoc_kham && p.dropnlmd == 1) {
-                        if (10 > Util.random(0, 300) || mob.color_name != 0) {
-                            LeaveItemMap.leave_item_3(map, mob, p);
-                        }
-                        if (20 > Util.random(0, 300)) {
-                            LeaveItemMap.leave_item_4(map, mob, p);
-                        }
-                        if (20 > Util.random(0, 300)) {
-                            LeaveItemMap.leave_item_7(map, mob, p);
-                        }
-                        if (30 > Util.random(0, 100)) {
-                            LeaveItemMap.leave_vang(map, mob, p);
-                        }
-                        if (30 > Util.random(0, 100)) {
-                            LeaveItemMap.leave_material(map, mob, p);
-                        }
-                        if (Manager.gI().event != 0 && 30 > Util.random(0, 100) && Math.abs(mob.level - p.level) <= 5) {
-                            LeaveItemMap.leave_item_event(map, mob, p);
-                        }
-                    }if (Math.abs(mob.level - p.level) <= 10 && !check_mob_roi_ngoc_kham && p.dropnlmd == 0) {
-                        if (10 > Util.random(0, 300) || mob.color_name != 0) {
-                            LeaveItemMap.leave_item_3(map, mob, p);
-                        }
-                        if (20 > Util.random(0, 300)) {
-                            LeaveItemMap.leave_item_4(map, mob, p);
-                        }
-                        if (20 > Util.random(0, 300)) {
-                            LeaveItemMap.leave_item_7(map, mob, p);
-                        }
-                        if (30 > Util.random(0, 100)) {
-                            LeaveItemMap.leave_vang(map, mob, p);
-                        }
-                        if (Manager.gI().event != 0 && 30 > Util.random(0, 100) && Math.abs(mob.level - p.level) <= 5) {
-                            LeaveItemMap.leave_item_event(map, mob, p);
+                    if (Math.abs(mob.level - p.level) <= 10) {
+                        if (Map.is_khu_2(map)) {
+                            // Khu 2: Farm đặc biệt - Tỷ lệ rơi item 3 (đồ color 3 & 4) giảm nhẹ, vàng x2, item 7 đặc biệt + cỏ 3/4 lá
+                            if (25 > Util.random(0, 100) || mob.color_name != 0) {
+                                LeaveItemMap.leave_item_3(map, mob, p);
+                            }
+                            if (20 > Util.random(0, 300)) {
+                                LeaveItemMap.leave_item_4(map, mob, p);
+                            }
+                            if (50 > Util.random(0, 100)) {
+                                LeaveItemMap.leave_item_7(map, mob, p);
+                            }
+                            if (60 > Util.random(0, 100)) {
+                                LeaveItemMap.leave_vang(map, mob, p);
+                            }
+                            if (p.dropnlmd == 1 && 40 > Util.random(0, 100)) {
+                                LeaveItemMap.leave_material(map, mob, p);
+                            }
+                            if (Manager.gI().event != 0 && 30 > Util.random(0, 100) && Math.abs(mob.level - p.level) <= 5) {
+                                LeaveItemMap.leave_item_event(map, mob, p);
+                            }
+                            LeaveItemMap.leave_light_dark_gem(map, mob, p);
+                        } else if (!check_mob_roi_ngoc_kham && p.dropnlmd == 1) {
+                            if (10 > Util.random(0, 300) || mob.color_name != 0) {
+                                LeaveItemMap.leave_item_3(map, mob, p);
+                            }
+                            if (20 > Util.random(0, 300)) {
+                                LeaveItemMap.leave_item_4(map, mob, p);
+                            }
+                            if (20 > Util.random(0, 300)) {
+                                LeaveItemMap.leave_item_7(map, mob, p);
+                            }
+                            if (30 > Util.random(0, 100)) {
+                                LeaveItemMap.leave_vang(map, mob, p);
+                            }
+                            if (30 > Util.random(0, 100)) {
+                                LeaveItemMap.leave_material(map, mob, p);
+                            }
+                            if (Manager.gI().event != 0 && 30 > Util.random(0, 100) && Math.abs(mob.level - p.level) <= 5) {
+                                LeaveItemMap.leave_item_event(map, mob, p);
+                            }
+                            LeaveItemMap.leave_light_dark_gem(map, mob, p);
+                        } else if (!check_mob_roi_ngoc_kham && p.dropnlmd == 0) {
+                            if (10 > Util.random(0, 300) || mob.color_name != 0) {
+                                LeaveItemMap.leave_item_3(map, mob, p);
+                            }
+                            if (20 > Util.random(0, 300)) {
+                                LeaveItemMap.leave_item_4(map, mob, p);
+                            }
+                            if (20 > Util.random(0, 300)) {
+                                LeaveItemMap.leave_item_7(map, mob, p);
+                            }
+                            if (30 > Util.random(0, 100)) {
+                                LeaveItemMap.leave_vang(map, mob, p);
+                            }
+                            if (Manager.gI().event != 0 && 30 > Util.random(0, 100) && Math.abs(mob.level - p.level) <= 5) {
+                                LeaveItemMap.leave_item_event(map, mob, p);
+                            }
+                            LeaveItemMap.leave_light_dark_gem(map, mob, p);
                         }
                     }
                     if (check_mob_roi_ngoc_kham) {
@@ -2600,10 +3310,11 @@ if (mob.template.mob_id == 23 || mob.template.mob_id == 17) {
         }
         m.writer().writeInt((int) Math.min(p.hp, Integer.MAX_VALUE));
         m.writer().writeInt(p.mp);
-        m.writer().writeByte(11); // 1: green, 5: small white 9: big white, 10: st dien, 11: st bang
-        m.writer().writeInt(0); // dame plus
+        m.writer().writeByte(spDame.damage > 0 ? (spDame.type == SpecialDamage.TYPE_LIGHT ? 10 : 11) : 11); // 10: yellow (light), 11: violet (dark)
+        m.writer().writeInt(spDame.damage > 0 ? spDame.damage : 0); // dame plus (Special Damage)
         MapService.send_msg_player_inside(map, p, m, true);
         m.cleanup();
+
         // exp
         long expup = 0;
         expup = dame; // tinh exp
@@ -2637,6 +3348,9 @@ if (mob.template.mob_id == 23 || mob.template.mob_id == 17) {
             expup /= 2;
         }
         if (Math.abs(mob.level - p.level) <= 10 && expup > 0) {
+            if (Map.is_khu_2(map)) {
+                expup = (expup * 15) / 10; // x1.5 exp o Khu 2
+            }
             if (p.party != null) {
                 for (int i = 0; i < p.party.get_mems().size(); i++) {
                     Player pm = p.party.get_mems().get(i);
@@ -2710,6 +3424,9 @@ if (mob.template.mob_id == 23 || mob.template.mob_id == 17) {
                     m.writer().writeInt((int) Math.min(p.body.get_max_hp(), Integer.MAX_VALUE));
                     p.conn.addmsg(m);
                     m.cleanup();
+                    if (my_pet.isEagle()) {
+                        LeaveItemMap.leave_vang_eagle(map, mob.index, p);
+                    }
                 }
             }
         }

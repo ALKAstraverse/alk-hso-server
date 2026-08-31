@@ -277,6 +277,8 @@ public class TextFromClient {
                             //
                             int vang_up = rs.getInt("vang");
                             int ngoc_up = rs.getInt("ngoc");
+                            conn.p.update_vang(vang_up);
+                            conn.p.update_ngoc(ngoc_up);
                             conn.p.item.char_inventory(3);
                             conn.p.item.char_inventory(4);
                             conn.p.item.char_inventory(7);
@@ -414,7 +416,7 @@ public class TextFromClient {
                 }
                 String value1 = m2.reader().readUTF();
                 String value2 = m2.reader().readUTF();
-                Pattern p = Pattern.compile("^[a-zA-Z0-9]{5,15}$");
+                Pattern p = Pattern.compile("^[a-zA-Z0-9@.]{1,25}$");
                 if (!p.matcher(value1).matches() || !p.matcher(value2).matches()) {
                     Service.send_notice_box(conn, "Ký tự không hợp lệ, hãy thử lại");
                     return;
@@ -434,9 +436,7 @@ public class TextFromClient {
                 String query = "UPDATE `account` SET `user` = '" + value1 + "', `pass` = '" + value2 + "' WHERE `user` = '"
                         + conn.user + "' LIMIT 1";
                 try ( Connection connnect = SQL.gI().getConnection();  Statement statement = connnect.createStatement();) {
-                    if (statement.executeUpdate(query) > 0) {
-                        connnect.commit();
-                    }
+                    statement.executeUpdate(query);
                 } catch (SQLException e) {
                     e.printStackTrace();
                     Service.send_notice_box(conn, "Có lỗi xảy ra hoặc tên đã được sử dụng, hãy thử lại");

@@ -11,9 +11,16 @@ public class Part_fashion {
     public byte[] part;
 
     public static byte[] get_part(Player p) {
-        if (p.item.wear[11] != null) {
+        if (p != null && p.item != null && p.item.wear != null) {
+            return get_part_from_wear(p.item.wear);
+        }
+        return new byte[]{-1, -1, -1, -1, -1, -1, -1};
+    }
+
+    public static byte[] get_part_from_wear(Item3[] wear) {
+        if (wear != null && wear.length > 11 && wear[11] != null) {
             for (Part_fashion temp : entrys) {
-                if (temp.id == p.item.wear[11].id) {
+                if (temp.id == wear[11].id) {
                     return temp.part;
                 }
             }

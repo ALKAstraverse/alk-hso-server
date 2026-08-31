@@ -31,11 +31,11 @@ public class SaveData {
 
     @SuppressWarnings("unchecked")
     public synchronized static void process() {
-//        synchronized (SQL.) {
         long time_check = System.currentTimeMillis();
+        Connection conn = null;
         try {
-            Connection conn = SQL.gI().getConnection();
-//Connection conn = DriverManager.getConnection(SQL.gI().url, Manager.gI().mysql_user, Manager.gI().mysql_pass);
+            conn = SQL.gI().getConnection();
+            conn.setAutoCommit(true);
             // clan
             BXH.BXH_clan.clear();
             for (Clan clan : Clan.get_all_clan()) {
@@ -133,7 +133,7 @@ public class SaveData {
                     + "`itembox7` = ?, `itembox3` = ?, `pet` = ?, `medal_create_material` = ?, `point_active` = ?, `vang` = ?, "
                     + "`kimcuong` = ?, `tiemnang` = ?, `kynang` = ?, `diemdanh` = ?, `chucphuc` = ?, `hieuchien` = ?, `typeexp` = ?, "
                     + "`date` = ?, `point1` = ?, `point2` = ?, `point3` = ?, `point4` = ?, `clazz` = ?,`chuyensinh` = ?, `tutien` = ?,"
-                    + " `dquest` = ?, `pointarena` = ?, `tinhtu_material` = ?, `nvtt` = ? WHERE `id` = ?;";
+                    + " `dquest` = ?, `pointarena` = ?, `tinhtu_material` = ?, `nvtt` = ?, `detu` = ? WHERE `id` = ?;";
             ps = conn.prepareStatement(query);
             for (Map[] map : Map.entrys) {
                 for (Map map0 : map) {
@@ -143,8 +143,26 @@ public class SaveData {
                         Player p0 = map0.players.get(i1);
                         // Player p0 = ServerManager.gI().t1.list_p.get(i1);
                         //
-                        ps.setInt(1, p0.level);
-                        ps.setLong(2, p0.exp);
+                        // When training disciple, save master's original stats to DB
+                        if (p0.is_detu_training && p0.detu != null) {
+                            // Update detu with current training progress
+                            p0.detu.level = p0.level;
+                            p0.detu.exp = p0.exp;
+                            p0.detu.head = p0.head;
+                            p0.detu.eye = p0.eye;
+                            p0.detu.hair = p0.hair;
+                            p0.detu.point1 = p0.point1;
+                            p0.detu.point2 = p0.point2;
+                            p0.detu.point3 = p0.point3;
+                            p0.detu.point4 = p0.point4;
+                            p0.detu.tiemnang = p0.tiemnang;
+                            p0.detu.kynang = p0.kynang;
+                            System.arraycopy(p0.skill_point, 0, p0.detu.skill_point, 0, p0.skill_point.length);
+                            System.arraycopy(p0.item.wear, 0, p0.detu.wear, 0, p0.item.wear.length);
+                        }
+                        // Use master's original values for DB save
+                        ps.setInt(1, p0.is_detu_training ? p0.main_level : p0.level);
+                        ps.setLong(2, p0.is_detu_training ? p0.main_exp : p0.exp);
                         JSONArray jsar = new JSONArray();
 
                         if (p0.isdie || Map.is_map_cant_save_site(p0.map.map_id)) {
@@ -159,14 +177,14 @@ public class SaveData {
 
                         ps.setNString(3, jsar.toJSONString());
                         jsar.clear();
-                        jsar.add(p0.head);
-                        jsar.add(p0.eye);
-                        jsar.add(p0.hair);
+                        jsar.add(p0.is_detu_training ? p0.main_head : p0.head);
+                        jsar.add(p0.is_detu_training ? p0.main_eye : p0.eye);
+                        jsar.add(p0.is_detu_training ? p0.main_hair : p0.hair);
                         ps.setNString(4, jsar.toJSONString());
                         jsar.clear();
                         for (int i = 0; i < p0.list_eff.size(); i++) {
                             EffTemplate temp = p0.list_eff.get(i);
-                            if (temp.id != -126 && temp.id != -125) {
+                            if (temp.id != -126 && temp.id != -125 && temp.id != -127) {
                                 continue;
                             }
                             JSONArray jsar21 = new JSONArray();
@@ -198,8 +216,9 @@ public class SaveData {
                         }
                         ps.setNString(6, jsar.toJSONString());
                         jsar.clear();
+                        byte[] sp_save = p0.is_detu_training ? p0.main_skill_point : p0.skill_point;
                         for (int i = 0; i < 21; i++) {
-                            jsar.add(p0.skill_point[i]);
+                            jsar.add(sp_save[i]);
                         }
                         ps.setNString(7, jsar.toJSONString());
                         jsar.clear();
@@ -254,8 +273,9 @@ public class SaveData {
                         ps.setNString(10, jsar.toJSONString());
                         jsar.clear();
                         //
-                        for (int i = 0; i < p0.item.wear.length - 1; i++) {
-                            Item3 temp = p0.item.wear[i];
+                        Item3[] wear_save = p0.is_detu_training ? p0.main_wear : p0.item.wear;
+                        for (int i = 0; i < wear_save.length - 1; i++) {
+                            Item3 temp = wear_save[i];
                             if (temp != null) {
                                 JSONArray jsar2 = new JSONArray();
                                 jsar2.add(temp.id);
@@ -396,19 +416,19 @@ public class SaveData {
                         //
                         ps.setLong(21, p0.get_vang());
                         ps.setInt(22, p0.get_ngoc());
-                        ps.setInt(23, p0.tiemnang);
-                        ps.setShort(24, p0.kynang);
+                        ps.setInt(23, p0.is_detu_training ? p0.main_tiemnang : p0.tiemnang);
+                        ps.setShort(24, p0.is_detu_training ? p0.main_kynang : p0.kynang);
                         ps.setByte(25, p0.diemdanh);
 
                         ps.setByte(26, (byte) 0);
                         ps.setInt(27, 0);
                         ps.setByte(28, p0.type_exp);
                         ps.setNString(29, p0.date.toString());
-                        ps.setInt(30, p0.point1);
-                        ps.setInt(31, p0.point2);
-                        ps.setInt(32, p0.point3);
-                        ps.setInt(33, p0.point4);
-                        ps.setInt(34, p0.clazz);
+                        ps.setInt(30, p0.is_detu_training ? p0.main_point1 : p0.point1);
+                        ps.setInt(31, p0.is_detu_training ? p0.main_point2 : p0.point2);
+                        ps.setInt(32, p0.is_detu_training ? p0.main_point3 : p0.point3);
+                        ps.setInt(33, p0.is_detu_training ? p0.main_point4 : p0.point4);
+                        ps.setInt(34, p0.is_detu_training ? p0.main_clazz : p0.clazz);
                         ps.setInt(35, p0.chuyensinh);
                         jsar.add(p0.luyenthe);
                         jsar.add(p0.kinhmach[0]);
@@ -437,7 +457,13 @@ public class SaveData {
                         ps.setNString(40, jsar.toJSONString());
                         jsar.clear();
 
-                        ps.setInt(41, p0.id);
+                        if (p0.detu != null) {
+                            ps.setNString(41, p0.detu.toJson());
+                        } else {
+                            ps.setNString(41, null);
+                        }
+
+                        ps.setInt(42, p0.id);
 
                         ps.executeUpdate();
 //                        ps.addBatch();
@@ -683,14 +709,15 @@ rs.close();
 
             }
 
-            conn.commit();
             rs.close();
             ps.close();
-            conn.close();
-        } catch (SQLException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             System.err.println("[" + Util.get_now_by_time() + "] save data fail!");
-            return;
+        } finally {
+            if (conn != null) {
+                try { conn.close(); } catch (Exception ignore) {}
+            }
         }
         System.out.println("[" + Util.get_now_by_time() + "] save data ok " + (System.currentTimeMillis() - time_check));
         ServerManager.gI().time_l = System.currentTimeMillis() + 60_000L;

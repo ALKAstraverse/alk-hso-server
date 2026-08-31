@@ -625,10 +625,63 @@ private void auto_chat_npc() {
                         if (temp.id == -125) {
                             p.set_x2_xp(0);
                         }
+                        if (temp.id == -127) {
+                            // Check auto renewal with dong bac tyche only if in zone 1 and map has monsters
+                            if (this.zone_id == 1 && Map.has_monster(this.map_id)) {
+                                if (p.item.total_item_by_id(4, 54) > 0) {
+                                    p.item.remove(4, 54, 1);
+                                    p.item.char_inventory(4);
+                                    p.add_eff(-127, 1, 60 * 60 * 1000);
+                                    Service.send_notice_box(p.conn, "Đã tự động sử dụng 1 Đồng bạc Tyche để gia hạn thêm 1 giờ ở Khu 2!");
+                                } else {
+                                    Map[] mapAll = Map.get_map_by_id(this.map_id);
+                                    Map targetNormalZone = null;
+                                    if (mapAll != null) {
+                                        for (Map mZone : mapAll) {
+                                            if (mZone.zone_id != 1 && mZone.players.size() < mZone.maxplayer) {
+                                                targetNormalZone = mZone;
+                                                break;
+                                            }
+                                        }
+                                        if (targetNormalZone == null) {
+                                            for (Map mZone : mapAll) {
+                                                if (mZone.zone_id != 1) {
+                                                    targetNormalZone = mZone;
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if (targetNormalZone != null) {
+                                        MapService.leave(this, p);
+                                        p.map = targetNormalZone;
+                                        MapService.enter(p.map, p);
+                                        Service.send_notice_box(p.conn, "Hết thời gian sử dụng Khu 2 và không có Đồng bạc Tyche, bạn đã được chuyển về Khu thường!");
+                                    }
+                                }
+                            }
+                        }
                         if (temp.id == 24 || temp.id == 23 || temp.id == 0 || temp.id == 2 || temp.id == 3 || temp.id == 4) {
                             if (temp.id == 2) {
                                 p.hp += p.hp_restore;
                             }
+                            Service.send_char_main_in4(p);
+                            for (int j = 0; j < players.size(); j++) {
+                                Player p2 = players.get(j);
+                                if (p2 != null && p2.id != p.id) {
+                                    MapService.send_in4_other_char(this, p2, p);
+                                }
+                            }
+                        }
+                        // cleanup new effects
+                        if (temp.id == -200 || temp.id == -201 || temp.id == -202 || temp.id == -203
+                                || temp.id == -204 || temp.id == -205 || temp.id == -206 || temp.id == -210
+                                || temp.id == -211 || temp.id == -212 || temp.id == -213
+                                || temp.id == -220 || temp.id == -221 || temp.id == -222 || temp.id == -223
+                                || temp.id == -224 || temp.id == -225 || temp.id == -226 || temp.id == -227
+                                || temp.id == -228 || temp.id == -229 || temp.id == -230 || temp.id == -231
+                                || temp.id == -232 || temp.id == -233 || temp.id == -234 || temp.id == -235
+                                || temp.id == -236) {
                             Service.send_char_main_in4(p);
                             for (int j = 0; j < players.size(); j++) {
                                 Player p2 = players.get(j);
@@ -649,6 +702,76 @@ private void auto_chat_npc() {
                                 MapService.change_flag(this, p, -1);
                             }
                         }
+                    }
+                    // bong lua: mat hp/s, max 8%/s
+                    if (temp.id == -202 && !p.isdie) {
+                        long now = System.currentTimeMillis();
+                        if (p.time_buff_hp < now) {
+                            p.time_buff_hp = now + 1000L;
+                            long max_hp = p.body.get_max_hp();
+                            long drain = (max_hp * temp.param) / 100;
+                            long max_drain = (max_hp * 8) / 100;
+                            if (drain > max_drain) drain = max_drain;
+                            if (drain < 1) drain = 1;
+                            p.hp -= drain;
+                            Service.usepotion(p, 0, -(int) drain);
+                            if (p.hp <= 0) {
+                                p.hp = 0;
+                                MapService.die_by_player(this, p, p);
+                            }
+                        }
+                    }
+                    // bong lanh: mat mp/s, max 8%/s
+                    if (temp.id == -201 && !p.isdie) {
+                        long now = System.currentTimeMillis();
+                        if (p.time_buff_mp < now) {
+                            p.time_buff_mp = now + 1000L;
+                            int max_mp = p.body.get_max_mp();
+                            long drain = (max_mp * temp.param) / 100;
+                            long max_drain = (max_mp * 8) / 100;
+                            if (drain > max_drain) drain = max_drain;
+                            if (drain < 1) drain = 1;
+                            p.mp -= (int) drain;
+                            if (p.mp < 0) p.mp = 0;
+                        }
+                    }
+                    // ngoc luc bao: chuyen 10% st thanh hp (handled in fire_player)
+                    // thieu chay: aoe 5000 damage/3s cho nguoi dung gan
+                    if (temp.id == -235 && !p.isdie && !Map.is_khu_2(this)) {
+                        long now = System.currentTimeMillis();
+                        if (p.time_buff_hp < now) {
+                            p.time_buff_hp = now + 3000L;
+                            long burn_dame = temp.param;
+                            for (Player p2 : players) {
+                                if (p2 != null && p2.id != p.id && !p2.isdie) {
+                                    int dx = Math.abs(p2.x - p.x);
+                                    int dy = Math.abs(p2.y - p.y);
+                                    if (dx <= 3 * 24 && dy <= 3 * 24) {
+                                        p2.hp -= burn_dame;
+                                        Service.usepotion(p2, 0, -(int) burn_dame);
+                                        if (p2.hp <= 0) {
+                                            p2.hp = 0;
+                                            MapService.die_by_player(this, p2, p);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // Check disciple training time expiration
+                    if (p.is_detu_training && p.detu != null) {
+                        if (!p.detu.canTrain()) {
+                            try {
+                                p.switchToMaster();
+                                Service.send_notice_box(p.conn, "Thời gian luyện đệ tử hôm nay đã hết!\nĐã tự động quay về nhân vật chính.");
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+                        }
+                    }
+                    // Update AI for summoned disciple
+                    if (p.detu != null && p.detu.state == client.Disciple.STATE_SUMMONED) {
+                        p.detu.updateAI(this);
                     }
                     // System.out.println(temp.id + " : " + (temp.time - System.currentTimeMillis()));
                 }
@@ -1487,5 +1610,19 @@ private void auto_chat_npc() {
         return id >= 53 && id <= 61;
     }
     
-    
+    public static boolean has_monster(int map_id) {
+        Map[] maps = get_map_by_id(map_id);
+        if (maps != null && maps.length > 0 && maps[0].mobs != null) {
+            return maps[0].mobs.length > 0;
+        }
+        return false;
+    }
+
+    public boolean has_monster() {
+        return has_monster(this.map_id);
+    }
+
+    public static boolean is_khu_2(Map map) {
+        return map != null && map.zone_id == 1 && has_monster(map.map_id);
+    }
 }

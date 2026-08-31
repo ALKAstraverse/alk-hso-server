@@ -467,11 +467,7 @@ public class GameSrc {
                         m.writer().writeByte(conn.p.clazz);
                         m.writer().writeShort(it3.level);
                         m.writer().writeByte(it3.tier); // tier
-                        m.writer().writeByte(it3.op.size());
-                        for (int i = 0; i < it3.op.size(); i++) {
-                            m.writer().writeByte(it3.op.get(i).id);
-                            m.writer().writeInt(it3.op.get(i).getParam(it3.tier));
-                        }
+                        it3.writeItemOptions(m, conn.p.clazz);
                         p0.conn.addmsg(m);
                         m.cleanup();
                         break;
@@ -498,11 +494,7 @@ public class GameSrc {
                                 m.writer().writeByte(conn.p.clazz);
                                 m.writer().writeShort(it3.level);
                                 m.writer().writeByte(it3.tier); // tier
-                                m.writer().writeByte(it3.op.size());
-                                for (int i = 0; i < it3.op.size(); i++) {
-                                    m.writer().writeByte(it3.op.get(i).id);
-                                    m.writer().writeInt(it3.op.get(i).getParam(it3.tier));
-                                }
+                                it3.writeItemOptions(m, conn.p.clazz);
                                 Player p0 = Map.get_player_by_name(conn.p.name_trade);
                                 if (p0 == null) {
                                     return;
@@ -531,11 +523,7 @@ public class GameSrc {
                                 m.writer().writeByte(conn.p.clazz);
                                 m.writer().writeShort(it3.level);
                                 m.writer().writeByte(it3.tier); // tier
-                                m.writer().writeByte(it3.op.size());
-                                for (int i = 0; i < it3.op.size(); i++) {
-                                    m.writer().writeByte(it3.op.get(i).id);
-                                    m.writer().writeInt(it3.op.get(i).getParam(it3.tier));
-                                }
+                                it3.writeItemOptions(m, conn.p.clazz);
                                 Player p0 = Map.get_player_by_name(conn.p.name_trade);
                                 if (p0 == null) {
                                     return;
@@ -1288,15 +1276,7 @@ public class GameSrc {
 					m.writer().writeByte(it_temp.color); // color
 					m.writer().writeByte(0); // can sell
 					m.writer().writeByte(0); // can trade
-					m.writer().writeByte(it_temp.op.size());
-					for (int i = 0; i < it_temp.op.size(); i++) {
-						m.writer().writeByte(it_temp.op.get(i).id);
-						if (it_temp.op.get(i).id == 96) {
-							m.writer().writeInt(it_temp.op.get(i).getParam(0));
-						} else {
-							m.writer().writeInt(it_temp.op.get(i).getParam(it_temp.tier));
-						}
-					}
+					it_temp.writeItemOptions(m, conn.p.clazz);
 					m.writer().writeInt(0); // time use
 					m.writer().writeByte(0);
 					m.writer().writeByte(0);
@@ -1412,15 +1392,7 @@ public class GameSrc {
 					m.writer().writeByte(it_temp.color); // color
 					m.writer().writeByte(0); // can sell
 					m.writer().writeByte(0); // can trade
-					m.writer().writeByte(it_temp.op.size());
-					for (int i = 0; i < it_temp.op.size(); i++) {
-						m.writer().writeByte(it_temp.op.get(i).id);
-						if (it_temp.op.get(i).id == 96) {
-							m.writer().writeInt(it_temp.op.get(i).getParam(0));
-						} else {
-							m.writer().writeInt(it_temp.op.get(i).getParam(it_temp.tier));
-						}
-					}
+					it_temp.writeItemOptions(m, conn.p.clazz);
 					m.writer().writeInt(0); // time use
 					m.writer().writeByte(0);
 					m.writer().writeByte(0);
@@ -2010,10 +1982,18 @@ public class GameSrc {
                         m.writer().writeByte(it_b.tier);
                         m.writer().writeShort(it_b.level);
                         m.writer().writeByte(it_b.color);
-                        m.writer().writeByte(it_b.op.size() + 1);
-                        for (int j = 0; j < it_b.op.size(); j++) {
-                            m.writer().writeByte(it_b.op.get(j).id);
-                            m.writer().writeInt(it_b.op.get(j).getParam(it_b.tier));
+                        int count = 0;
+                        for (Option o : it_b.op) {
+                            if (o != null && !Item3.isHiddenElementalOption(o.id, p0.clazz)) {
+                                count++;
+                            }
+                        }
+                        m.writer().writeByte(count + 1);
+                        for (Option o : it_b.op) {
+                            if (o != null && !Item3.isHiddenElementalOption(o.id, p0.clazz)) {
+                                m.writer().writeByte(o.id);
+                                m.writer().writeInt(o.getParam(it_b.tier));
+                            }
                         }
                         m.writer().writeByte(70);
                         m.writer().writeInt(temp.it_price);
@@ -2064,10 +2044,18 @@ public class GameSrc {
                         m.writer().writeByte(it_in_bag.tier);
                         m.writer().writeShort(it_in_bag.level);
                         m.writer().writeByte(it_in_bag.color);
-                        m.writer().writeByte(it_in_bag.op.size() + 1);
-                        for (int j = 0; j < it_in_bag.op.size(); j++) {
-                            m.writer().writeByte(it_in_bag.op.get(j).id);
-                            m.writer().writeInt(it_in_bag.op.get(j).getParam(it_in_bag.tier));
+                        int count = 0;
+                        for (Option o : it_in_bag.op) {
+                            if (o != null && !Item3.isHiddenElementalOption(o.id, p0.clazz)) {
+                                count++;
+                            }
+                        }
+                        m.writer().writeByte(count + 1);
+                        for (Option o : it_in_bag.op) {
+                            if (o != null && !Item3.isHiddenElementalOption(o.id, p0.clazz)) {
+                                m.writer().writeByte(o.id);
+                                m.writer().writeInt(o.getParam(it_in_bag.tier));
+                            }
                         }
                         m.writer().writeByte(70);
                         m.writer().writeInt(temp.it_price);
@@ -2120,7 +2108,9 @@ public class GameSrc {
                 }
                 Item3 it3 = p.item.bag3[id_item];
                 if (it3 != null) {
+                    System.out.println("[KHAM_NGOC] player=" + p.name + " gem=" + id_g1 + " item_type=" + it3.type + " item_name=" + it3.name);
                     if (!GameSrc.check_item_kham_ngoc_type(id_g1, it3)) {
+                        System.out.println("[KHAM_NGOC] FAILED check_item_kham_ngoc_type gem=" + id_g1 + " item_type=" + it3.type);
                         Service.send_notice_box(p.conn, "Không thể khảm ngọc này lên vật phẩm này!");
                         return;
                     }
@@ -2274,9 +2264,43 @@ public class GameSrc {
                                 { // Tâm Linh
                                 it3.op.add(new Option(107, Util.random(400, 500)));
                                 break;
-                            }case 411:
+                            }                            case 411:
                             case 381: { // Tâm Linh
                                 it3.op.add(new Option(107, Util.random(500, 600)));
+                                break;
+                            }
+                            case 23:
+                            case 24:
+                            case 25:
+                            case 26:
+                            case 27: { // Ngoc anh sang lv 1-5
+                                int level = id_g1 - 22; // 1 to 5
+                                int lightDmg = 100 * (1 << (level - 1)); // 100, 200, 400, 800, 1600
+                                it3.op.add(new Option(6, lightDmg));
+                                // 75% rate for crit rate
+                                if (Util.random(100) < 75) {
+                                    int critRate = Util.random(1, 80) * 100; // 1%..80% (stored as 100..8000)
+                                    int critDmg = Util.random(115, 200); // 1.15x..2.00x (stored as 115..200)
+                                    it3.op.add(new Option(74, critRate));
+                                    it3.op.add(new Option(75, critDmg));
+                                }
+                                break;
+                            }
+                            case 28:
+                            case 29:
+                            case 30:
+                            case 31:
+                            case 32: { // Ngoc bong toi lv 1-5
+                                int level = id_g1 - 27; // 1 to 5
+                                int darkDmg = 100 * (1 << (level - 1)); // 100, 200, 400, 800, 1600
+                                it3.op.add(new Option(5, darkDmg));
+                                // 75% rate for crit rate
+                                if (Util.random(100) < 75) {
+                                    int critRate = Util.random(1, 80) * 100; // 1%..80% (stored as 100..8000)
+                                    int critDmg = Util.random(115, 200); // 1.15x..2.00x (stored as 115..200)
+                                    it3.op.add(new Option(72, critRate));
+                                    it3.op.add(new Option(73, critDmg));
+                                }
                                 break;
                             }
                           }
@@ -2301,7 +2325,9 @@ public class GameSrc {
                 break;
             }
             case 1: {
-                if (GameSrc.get_vang_hopngoc(id_item) <= 200_000) {
+                if (id_item == 27 || id_item == 32 || id_item == 356 || id_item == 361 || id_item == 366 || id_item == 371 || id_item == 376 || id_item == 381) {
+                    Service.send_notice_box(p.conn, "Đã hợp tối đa!");
+                } else if (GameSrc.get_vang_hopngoc(id_item) <= 200_000) {
                     p.id_hop_ngoc = id_item;
                     Service.send_box_input_text(p.conn, 15, "Nhập số lượng", new String[]{"Nhập số lượng"});
                 } else {
@@ -2374,7 +2400,8 @@ public class GameSrc {
 
     private static boolean check_item_kham_ngoc_type(short id_g1, Item3 it3) {
         boolean check = false;
-        if ((it3.type >= 8 && it3.type <= 11) && id_g1 >= 352 && id_g1 <= 361) {
+        // Vu khi: kiem, sung, gay, bua... (type 8..11)
+        if ((it3.type >= 8 && it3.type <= 11) && ((id_g1 >= 352 && id_g1 <= 361) || (id_g1 >= 23 && id_g1 <= 32))) {
             check = true;
         }
         if ((it3.type == 0 || it3.type == 1 || it3.type == 2 || it3.type == 3 || it3.type == 6) && id_g1 >= 362
@@ -2387,7 +2414,7 @@ public class GameSrc {
         //
         if (!check) {
             id_g1 -= 30;
-            if ((it3.type >= 8 && it3.type <= 11) && id_g1 >= 352 && id_g1 <= 361) {
+            if ((it3.type >= 8 && it3.type <= 11) && ((id_g1 >= 352 && id_g1 <= 361) || (id_g1 >= 23 && id_g1 <= 32))) {
                 check = true;
             }
             if ((it3.type == 0 || it3.type == 1 || it3.type == 2 || it3.type == 3 || it3.type == 6) && id_g1 >= 362

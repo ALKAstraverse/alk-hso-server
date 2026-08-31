@@ -17,6 +17,21 @@ import template.Medal_Material;
 import template.Option;
 
 public class LeaveItemMap {
+	// Item IDs for Light & Dark Gems (Category 7)
+	public static final short ITEM_LIGHT_GEM_LV1 = 23;
+	public static final short ITEM_LIGHT_GEM_LV2 = 24;
+	public static final short ITEM_DARK_GEM_LV1 = 28;
+	public static final short ITEM_DARK_GEM_LV2 = 29;
+
+	// Drop rate configurations (scale: 10000 = 100%)
+	// Normal zones: Lv1 ~ 5% (500 / 10000), Lv2 = 0%
+	public static final int NORMAL_LIGHT_DARK_GEM_LV1_RATE = 500; // 5.0%
+	public static final int NORMAL_LIGHT_DARK_GEM_LV2_RATE = 0;   // 0.0%
+
+	// Zone 2: Lv1 higher than normal (e.g., 1000 / 10000 = 10%), Lv2 ~ 1-2% (150 / 10000 = 1.5%)
+	public static final int ZONE2_LIGHT_DARK_GEM_LV1_RATE = 1000; // 10.0%
+	public static final int ZONE2_LIGHT_DARK_GEM_LV2_RATE = 150;  // 1.5%
+
 	public static List<Short> item0x = new ArrayList<>();
 	public static List<Short> item1x = new ArrayList<>();
 	public static List<Short> item2x = new ArrayList<>();
@@ -43,6 +58,9 @@ public class LeaveItemMap {
 				map.item_map[index_item_map].id_item = -1;
 				map.item_map[index_item_map].color = 0;
 				int vang_drop = Util.random(mob.level * 15, mob.level * 45);
+				if (Map.is_khu_2(map)) {
+					vang_drop *= 2;
+				}
 				EffTemplate ef = p.get_eff(52);
 				if (ef != null) {
 					vang_drop += (vang_drop * (ef.param / 100)) / 100;
@@ -68,18 +86,54 @@ public class LeaveItemMap {
 		}
 	}
 
+	public static void leave_vang_eagle(Map map, int mob_index, Player p) throws IOException {
+		int index_item_map = map.get_item_map_index_able();
+		if (index_item_map > -1) {
+			int vang_drop = Util.random(client.Pet.EAGLE_GOLD_MIN, client.Pet.EAGLE_GOLD_MAX + 1);
+			map.item_map[index_item_map] = new ItemMap();
+			map.item_map[index_item_map].id_item = -1;
+			map.item_map[index_item_map].color = 0;
+			map.item_map[index_item_map].quantity = (short) vang_drop;
+			map.item_map[index_item_map].category = 4;
+			map.item_map[index_item_map].idmaster = (short) p.id;
+			map.item_map[index_item_map].time_exist = System.currentTimeMillis() + 60_000L;
+			map.item_map[index_item_map].time_pick = System.currentTimeMillis() + 1_500L;
+			String name = "vàng *" + map.item_map[index_item_map].quantity;
+			// add in4 game scr
+			Message mi = new Message(19);
+			mi.writer().writeByte(4);
+			mi.writer().writeShort(mob_index); // target mob index
+			mi.writer().writeShort(0); // id icon (0 : vang)
+			mi.writer().writeShort(index_item_map);
+			mi.writer().writeUTF(name);
+			mi.writer().writeByte(0); // color
+			mi.writer().writeShort(-1); // id player
+			MapService.send_msg_player_inside(map, p, mi, true);
+			mi.cleanup();
+		}
+	}
+
 	public static void leave_item_3(Map map, Mob_in_map mob, Player p) throws IOException {
 		if (mob != null) {
 			short id_item_can_drop = 0;
 			byte color_ = 0;
-			if (60 > Util.random(0, 200)) {
-				color_ = 1;
-			} else if (25 > Util.random(0, 275)) {
-				color_ = 2;
-			} else if (15 > Util.random(0, 350)) {
-				color_ = 3;
-			} else if (5 > Util.random(0, 500)) {
-				color_ = 4;
+			if (Map.is_khu_2(map)) {
+				// Khu 2: Chỉ rơi trang bị Color 3 và Color 4, tăng tỷ lệ so với map thường
+				if (35 > Util.random(0, 100)) {
+					color_ = 4;
+				} else {
+					color_ = 3;
+				}
+			} else {
+				if (60 > Util.random(0, 200)) {
+					color_ = 1;
+				} else if (25 > Util.random(0, 275)) {
+					color_ = 2;
+				} else if (15 > Util.random(0, 350)) {
+					color_ = 3;
+				} else if (5 > Util.random(0, 500)) {
+					color_ = 4;
+				}
 			}
 			if (mob.color_name != 0) {
 				color_ = 3;
@@ -225,6 +279,18 @@ public class LeaveItemMap {
 	public static void leave_item_7(Map map, Mob_in_map mob, Player p) throws IOException {
 		if (mob != null) {
 			short index_real = (short) Util.random(0, 4);
+			if (Map.is_khu_2(map)) {
+				// Khu 2: drop rate dac biet:
+				// Cỏ 3 lá (12), Cỏ 4 lá (13) tỷ lệ trung bình
+				// Các item đặc biệt: Đá cường hóa (0), Sắt vụn (1), Thỏi titan (2), Kim loại vũ trụ (3), Lông đỏ (9), Lông vàng (10), Khúc xương (11)
+				if (25 > Util.random(0, 100)) {
+					// 25% roi co 3 la hoac co 4 la
+					index_real = (short) (Util.random(0, 2) == 0 ? 12 : 13);
+				} else {
+					short[] special_items = new short[]{0, 1, 2, 3, 9, 10, 11};
+					index_real = special_items[Util.random(special_items.length)];
+				}
+			}
 			//
 			leave_item_by_type7(map, index_real, p, mob.index);
 		}
@@ -652,6 +718,30 @@ public class LeaveItemMap {
 			if (index_real != -1) {
 				leave_item_by_type7(map, index_real, p, mob.index);
 			}
+		}
+	}
+
+	public static void leave_light_dark_gem(Map map, Mob_in_map mob, Player p) throws IOException {
+		if (mob == null || p == null || map == null) {
+			return;
+		}
+		boolean isKhu2 = Map.is_khu_2(map);
+		int rateLv1 = isKhu2 ? ZONE2_LIGHT_DARK_GEM_LV1_RATE : NORMAL_LIGHT_DARK_GEM_LV1_RATE;
+		int rateLv2 = isKhu2 ? ZONE2_LIGHT_DARK_GEM_LV2_RATE : NORMAL_LIGHT_DARK_GEM_LV2_RATE;
+
+		short gemToDrop = -1;
+		int roll = Util.random(0, 10000);
+
+		if (rateLv2 > 0 && roll < rateLv2) {
+			// Roll thành công Lv2 (chỉ ở Khu 2)
+			gemToDrop = (Util.random(0, 2) == 0) ? ITEM_LIGHT_GEM_LV2 : ITEM_DARK_GEM_LV2;
+		} else if (roll < rateLv2 + rateLv1) {
+			// Roll thành công Lv1
+			gemToDrop = (Util.random(0, 2) == 0) ? ITEM_LIGHT_GEM_LV1 : ITEM_DARK_GEM_LV1;
+		}
+
+		if (gemToDrop != -1) {
+			leave_item_by_type7(map, gemToDrop, p, mob.index);
 		}
 	}
 }
